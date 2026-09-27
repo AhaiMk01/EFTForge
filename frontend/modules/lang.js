@@ -188,7 +188,7 @@ const _TRANSLATIONS = {
         "ui.balanceRecoil":       "Recoil",
         "ui.balanceErgo":         "Ergo",
         "th.price":               "Price",
-        "th.priceTooltip":        "To switch between PvP and PvE pricing, open the Price panel and toggle PvE mode",
+        "th.priceTooltip":        "To switch between pricing for different gamemodes, open the Price panel and toggle your desired gamemode",
         "th.heatCoolBurn":        "Heat/Cool/Burn",
         "th.muzzleVelocity":      "Velocity",
         // Build manager modals
@@ -1239,7 +1239,7 @@ const _TRANSLATIONS = {
         "ui.balanceErgo":         "人机",
         "th.trueErgo":            "真实人机",
         "th.price":               "价格",
-        "th.priceTooltip":        "如需切换PvP舆PvE定价，请打开价格面板并切换PvE模式",
+        "th.priceTooltip":        "如需切换游戏模式定价，请打开价格面板并切换游戏模式",
         "th.heatCoolBurn":        "发热/冷却/耐久损耗",
         "th.muzzleVelocity":      "膛口初速",
         // Build manager modals
