@@ -2012,7 +2012,7 @@ const _TRANSLATIONS = {
         "cb.goOnlineBtn":         "连接 EFTForge.com",
         "bp.localModeTip":        "本地模式下预览图生成服务不可用",
         "bp.kitbashWorking":      "Kitbash! 正在努力绘制预览图中！",
-        // 3D 改装视图（Kitbash! 查看器）
+        // 3D builder (Kitbash! viewer)）
         "b3d.modeTip":            "在 3D 视图和 2D 工作台之间切换",
         "b3d.pickerStyle":        "紧凑配件列表",
         "b3d.pickerStyleTip":     "在槽位下方的紧凑网格中选择配件（与游戏内的改装配件列表UI相同）",
