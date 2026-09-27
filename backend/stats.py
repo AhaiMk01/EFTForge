@@ -160,6 +160,7 @@ def _compute_stats(
     total_recoil_modifier = 0.0
     total_accuracy_mod = 0.0
     total_velocity_mod = base_item.velocity_modifier or 0
+    total_loudness = 0
     barrel_coi = None  # installed barrel's centerOfImpact overrides the weapon base
     heat_factor = 1.0
     cooling_factor = 1.0
@@ -182,6 +183,8 @@ def _compute_stats(
         # Muzzle velocity: summed percentage modifier (barrel + muzzle devices); applied to
         # the loaded ammo's velocity, not overridden like accuracy's COI
         total_velocity_mod += att.velocity_modifier or 0
+        # Loudness: plain sum of every installed mod's modifier (suppressor, brake under it, ...)
+        total_loudness += att.loudness or 0
         # Heat/cooling/durability-burn are multipliers (not summed percentages) - default 1.0 for parts without the stat
         if att.heat_factor is not None:
             heat_factor *= att.heat_factor
@@ -225,6 +228,7 @@ def _compute_stats(
         "cooling_factor": round(cooling_factor, 4),
         "durability_burn_factor": round(durability_burn_factor, 4),
         "velocity_modifier_pct": round(total_velocity_mod, 4),
+        "loudness": total_loudness,
     }
 
 

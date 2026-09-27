@@ -1700,7 +1700,7 @@ header:not(.header-expanded) .header-nav-btn-icon {
 }
 
 /* Auto-hide empty columns */
-/* Column order: 1=name 2=price 3=₽/recoil 4=weight 5=recoil 6=acc 7=ergo 8=evo 9=R+E 10=heat/cool/burn 11=velocity */
+/* Column order: 1=name 2=price 3=₽/recoil 4=weight 5=recoil 6=acc 7=ergo 8=evo 9=R+E 10=heat/cool/burn 11=velocity 12=loudness */
 .attachment-table.hide-col-price th:nth-child(2),
 .attachment-table.hide-col-price td:nth-child(2) { display: none; }
 .attachment-table.hide-col-rub-recoil th:nth-child(3),
@@ -1721,6 +1721,8 @@ header:not(.header-expanded) .header-nav-btn-icon {
 .attachment-table.hide-col-heat td:nth-child(10) { display: none; }
 .attachment-table.hide-col-vel th:nth-child(11),
 .attachment-table.hide-col-vel td:nth-child(11) { display: none; }
+.attachment-table.hide-col-loud th:nth-child(12),
+.attachment-table.hide-col-loud td:nth-child(12) { display: none; }
 
 /* Balance controls: slider shown when R+E sort is active */
 .balance-controls {

@@ -603,6 +603,9 @@ async function openSlotSelector(parentNode, slot) {
                     <th id="th-vel" onclick="changeSort('vel')">
                         ${t("th.muzzleVelocity")} <span class="sort-indicator"></span>
                     </th>
+                    <th id="th-loud" onclick="changeSort('loud')">
+                        ${t("th.loudness")} <span class="sort-indicator"></span>
+                    </th>
                 </tr>
             </thead>
 
@@ -897,6 +900,10 @@ function applyAttachmentSort() {
             primary = (a.item.velocity_modifier ?? 0) - (b.item.velocity_modifier ?? 0);
             break;
 
+        case "loud":
+            primary = (a.item.loudness ?? 0) - (b.item.loudness ?? 0);
+            break;
+
         default:
             primary = 0;
     }
@@ -937,6 +944,7 @@ function _updateColumnVisibility(items) {
         e.item.heat_factor != null || e.item.cooling_factor != null || e.item.durability_burn_factor != null
     );
     const hasVel     = items.some(e => e.item.velocity_modifier != null && e.item.velocity_modifier !== 0);
+    const hasLoud    = items.some(e => e.item.loudness != null && e.item.loudness !== 0);
 
     table.classList.toggle("hide-col-weight", !hasWeight);
     table.classList.toggle("hide-col-recoil", !hasRecoil);
@@ -946,6 +954,7 @@ function _updateColumnVisibility(items) {
     table.classList.toggle("hide-col-price",  !hasPrice);
     table.classList.toggle("hide-col-heat",   !hasHeat);
     table.classList.toggle("hide-col-vel",    !hasVel);
+    table.classList.toggle("hide-col-loud",   !hasLoud);
     // Combo-only columns - always hidden in list mode
     table.classList.add("hide-col-rub-recoil", "hide-col-balance");
 }
@@ -987,7 +996,7 @@ function updateSortIndicators() {
       ? EFTForge.state.comboSort
       : EFTForge.state.attachmentSort;
 
-  const headers = ["name", "weight", "recoil", "ergo", "acc", "evo", "rub-recoil", "price", "balance", "heat", "vel"];
+  const headers = ["name", "weight", "recoil", "ergo", "acc", "evo", "rub-recoil", "price", "balance", "heat", "vel", "loud"];
   headers.forEach(key => {
     const th = document.getElementById(`th-${key}`);
     if (!th) return;
@@ -1123,6 +1132,15 @@ function _velCellHtml(item) {
     if (v == null || v === 0) return `<td class="vel-cell">-</td>`;
     const cls = v > 0 ? "positive" : "negative";
     return `<td class="vel-cell"><span class="${cls}">${v > 0 ? "+" : ""}${v.toFixed(1)}%</span></td>`;
+}
+
+// Loudness is a plain integer where lower is quieter, so a negative value gets the good color.
+// Like velocity, 0 means the mod doesn't touch it and shows as "-".
+function _loudCellHtml(item) {
+    const v = item.loudness ?? null;
+    if (v == null || v === 0) return `<td class="loud-cell">-</td>`;
+    const cls = v < 0 ? "positive" : "negative";
+    return `<td class="loud-cell"><span class="${cls}">${v > 0 ? "+" : ""}${v}</span></td>`;
 }
 
 // Preview a candidate in the current build panel: delta bars and value deltas against
@@ -1530,6 +1548,7 @@ function renderAttachmentRows(items) {
           <td class="col-combo-only"></td>
           ${_heatCoolBurnCellHtml(blItem)}
           ${_velCellHtml(blItem)}
+          ${_loudCellHtml(blItem)}
       `;
 
       ghostRow.addEventListener("mouseenter", () => {
@@ -1703,6 +1722,7 @@ function renderAttachmentRows(items) {
         <td class="col-combo-only"></td>
         ${_heatCoolBurnCellHtml(item)}
         ${_velCellHtml(item)}
+        ${_loudCellHtml(item)}
     `;
 
     row.addEventListener("mouseenter", () => {
@@ -2356,9 +2376,10 @@ function _updateComboColumnVisibility(items) {
     table.classList.toggle("hide-col-price",       !hasPrice);
     table.classList.toggle("hide-col-rub-recoil",  !(hasRecoil && hasPrice));
     table.classList.toggle("hide-col-balance",     !(hasRecoil && hasErgo));
-    // Heat/cooling/durability-burn and velocity modifier are per-item stats with no combo aggregation - always hidden here
+    // Heat/cooling/durability-burn, velocity and loudness are per-item stats with no combo aggregation - always hidden here
     table.classList.add("hide-col-heat");
     table.classList.add("hide-col-vel");
+    table.classList.add("hide-col-loud");
 }
 
 function _isComboInstalled(entry) {

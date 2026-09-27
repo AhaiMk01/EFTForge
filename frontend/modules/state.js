@@ -43,6 +43,7 @@ window.EFTForge.state = {
     lastHeatFactor:           null,
     lastCoolingFactor:        null,
     lastDurabilityBurnFactor: null,
+    lastLoudness:             null,
     currentEquipErgoModifier: 0,
 
     // Attachment table

@@ -58,6 +58,7 @@ _ATTACHMENT_STATS = [
     "cooling_factor",
     "durability_burn_factor",
     "velocity_modifier",
+    "loudness",
 ]
 _AMMO_STATS = [
     "ammo_damage",
@@ -669,6 +670,7 @@ def sync_items(sync_source: str = "scheduled"):
         cooling_factor = None
         durability_burn_factor = None
         velocity_modifier = None
+        loudness = None
 
         item_weight = item.get("weight") or 0
         # tarkov.dev GraphQL exposed Item.accuracyModifier as a percentage; the JSON
@@ -781,6 +783,11 @@ def sync_items(sync_source: str = "scheduled"):
                 # schema's Item.velocity, distinct from ItemPropertiesAmmo.initialSpeed). Already
                 # a plain percentage (e.g. -2 for -2%), no scaling needed.
                 velocity_modifier = item.get("velocity")
+            if typename in ["ItemPropertiesWeaponMod", "ItemPropertiesBarrel"]:
+                # Loudness is also a top-level Item field rather than a property. Scopes and
+                # magazines carry it too but it's always 0 there, so only mods and barrels
+                # (suppressors, brakes, the DVL-10 suppressed barrel) keep it.
+                loudness = item.get("loudness")
 
             # --------------------------
             # Magazine
@@ -900,6 +907,7 @@ def sync_items(sync_source: str = "scheduled"):
             cooling_factor=cooling_factor,
             durability_burn_factor=durability_burn_factor,
             velocity_modifier=velocity_modifier,
+            loudness=loudness,
         )
 
         items_to_add.append(db_item)

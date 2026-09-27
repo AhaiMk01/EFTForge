@@ -3699,6 +3699,7 @@ window.EFTForge.optimizer = (function () {
                     <th>${_t('th.balance')}</th>
                     <th>${_t('th.heatCoolBurn')}</th>
                     <th>${_t('th.muzzleVelocity')}</th>
+                    <th>${_t('th.loudness')}</th>
                 </tr>
             </thead>
         `;
@@ -3756,6 +3757,7 @@ window.EFTForge.optimizer = (function () {
                 <td class="col-combo-only"></td>
                 ${_heatCoolBurnCellHtml(item)}
                 ${_velCellHtml(item)}
+                ${_loudCellHtml(item)}
             </tr>
         `;
     }
@@ -4138,10 +4140,10 @@ window.EFTForge.optimizer = (function () {
                 <span class="optimizer-manifest-title">${_t('optimizer.buildManifest')}</span>
             </div>
             <div class="optimizer-manifest-table-wrap">
-                <table class="attachment-table hide-col-rub-recoil hide-col-balance hide-col-acc hide-col-heat hide-col-vel optimizer-manifest-table">
+                <table class="attachment-table hide-col-rub-recoil hide-col-balance hide-col-acc hide-col-heat hide-col-vel hide-col-loud optimizer-manifest-table">
                     ${_manifestTheadHtml()}
                     <tbody id="optimizer-manifest-body">
-                        <tr><td colspan="11" class="optimizer-manifest-loading">${_t('optimizer.loadingItems')}</td></tr>
+                        <tr><td colspan="12" class="optimizer-manifest-loading">${_t('optimizer.loadingItems')}</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -4229,7 +4231,7 @@ window.EFTForge.optimizer = (function () {
         if (!body) return;
         const manifestItems = resolved.filter(i => !retainedIds.has(i.id));
         if (!manifestItems.length) {
-            body.innerHTML = `<tr><td colspan="11" class="optimizer-manifest-loading">${_t('optimizer.noItems')}</td></tr>`;
+            body.innerHTML = `<tr><td colspan="12" class="optimizer-manifest-loading">${_t('optimizer.noItems')}</td></tr>`;
             return;
         }
         body.innerHTML = manifestItems.map(_manifestRowHtml).join('');

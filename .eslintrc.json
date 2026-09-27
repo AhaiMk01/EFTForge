@@ -64,6 +64,7 @@
     "_updateGraphHeader": "readonly",
     "_updateViewBtns": "readonly",
     "_velCellHtml": "readonly",
+    "_loudCellHtml": "readonly",
     "applyAttachmentSort": "readonly",
     "attachTraderLevelsListeners": "readonly",
     "batchProcessCandidates": "readonly",

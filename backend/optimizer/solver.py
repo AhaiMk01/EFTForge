@@ -195,6 +195,7 @@ _RESKIN_SIGNATURE_FIELDS = (
     "cooling_factor",
     "durability_burn_factor",
     "velocity_modifier",
+    "loudness",
 )
 
 

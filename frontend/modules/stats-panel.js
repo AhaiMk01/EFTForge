@@ -557,6 +557,7 @@ function _insertHiddenStatsPanel(animate = true) {
   const fmt = (v, decimals = 2, spt = false) => v != null ? parseFloat(v).toFixed(decimals) : (spt ? "?" : "-");
   const fmtInt = (v) => v != null ? v : "-";
   const fmtFactor = (v) => v != null ? "×" + parseFloat(v).toFixed(2) : "-";
+  const fmtSigned = (v) => v != null ? (v > 0 ? "+" : "") + v : "-";
   const sections = [
     {
       title: t("hidden.sectionGeneral"),
@@ -565,6 +566,7 @@ function _insertHiddenStatsPanel(animate = true) {
         [t("hidden.heatFactor"),    fmtFactor(EFTForge.state.lastHeatFactor),                                    t("hidden.tip.heatFactor")],
         [t("hidden.coolingFactor"), fmtFactor(EFTForge.state.lastCoolingFactor),                                 t("hidden.tip.coolingFactor")],
         [t("hidden.durabilityBurn"), fmtFactor(EFTForge.state.lastDurabilityBurnFactor),                         t("hidden.tip.durabilityBurn")],
+        [t("hidden.loudness"),      fmtSigned(EFTForge.state.lastLoudness),                                      t("hidden.tip.loudness")],
       ],
     },
     {
@@ -934,6 +936,7 @@ async function updateStatsPanel(data, { preloadedAmmo = null, preloadedUbglAmmo 
   EFTForge.state.lastHeatFactor           = data.heat_factor ?? null;
   EFTForge.state.lastCoolingFactor        = data.cooling_factor ?? null;
   EFTForge.state.lastDurabilityBurnFactor = data.durability_burn_factor ?? null;
+  EFTForge.state.lastLoudness             = data.loudness ?? null;
   // The 3D view aims with our totals, not its own sums.
   EFTForge.builder3d?.onStats();
 

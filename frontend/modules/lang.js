@@ -95,6 +95,7 @@ const _TRANSLATIONS = {
         "hidden.heatFactor":        "Heat Factor",
         "hidden.coolingFactor":     "Cooling Factor",
         "hidden.durabilityBurn":    "Durability Burn",
+        "hidden.loudness":          "Loudness",
         "hidden.fireRate":          "Fire Rate",
         "hidden.aimPlane":          "Aim Deviation",
         "hidden.camAngleStep":      "Camera Angle Step",
@@ -144,6 +145,7 @@ const _TRANSLATIONS = {
         "hidden.tip.heatFactor":    "Combined multiplier of every installed mod and the selected ammo's heat buildup per shot",
         "hidden.tip.coolingFactor": "Combined multiplier of every installed mod's cooling rate between shots",
         "hidden.tip.durabilityBurn": "Combined multiplier of every installed mod and the selected ammo's durability burn per shot",
+        "hidden.tip.loudness":      "Sum of every installed mod's loudness value. Note: this stat has no effect in game. The game only checks whether any suppressor is installed, which switches both the gunshot sound and how far bots can hear it. The number itself is never read",
         "hidden.tooltip":           "Stats marked ? are unavailable for weapons not yet in the game data source",
         "hidden.speculationHint":   "Some of the explanations above are best-effort guesses based on the raw game data field names and may not accurately reflect what these stats actually do in-game.",
         // Price view
@@ -191,6 +193,7 @@ const _TRANSLATIONS = {
         "th.priceTooltip":        "To switch between pricing for different gamemodes, open the Price panel and toggle your desired gamemode",
         "th.heatCoolBurn":        "Heat/Cool/Burn",
         "th.muzzleVelocity":      "Velocity",
+        "th.loudness":            "Loudness",
         // Build manager modals
         "modal.save":             "SAVE BUILD",
         "modal.share":            "SHARE BUILD",
@@ -643,6 +646,7 @@ const _TRANSLATIONS = {
         "tracker.statLabel.cooling_factor":      "Cooling",
         "tracker.statLabel.durability_burn_factor": "Durability Burn",
         "tracker.statLabel.velocity_modifier":   "Muzzle Velocity %",
+        "tracker.statLabel.loudness":            "Loudness",
         "tracker.search.placeholder":            "Search items...",
         "tracker.filter.all":                    "All",
         "tracker.filter.weapons":                "Weapons",
@@ -1146,6 +1150,7 @@ const _TRANSLATIONS = {
         "hidden.heatFactor":        "发热系数",
         "hidden.coolingFactor":     "冷却系数",
         "hidden.durabilityBurn":    "耐久损耗系数",
+        "hidden.loudness":          "开火声音",
         "hidden.fireRate":          "射速",
         "hidden.aimPlane":          "瞄准偏差",
         "hidden.camAngleStep":      "相机角度步长",
@@ -1195,6 +1200,7 @@ const _TRANSLATIONS = {
         "hidden.tip.heatFactor":    "当前已安装的全部配件与所选弹药的单发热量累积倍数总和",
         "hidden.tip.coolingFactor": "当前已安装的全部配件的射击间冷却速度倍数总和",
         "hidden.tip.durabilityBurn": "当前已安装的全部配件与所选弹药导致的耐久损耗倍数总和",
+        "hidden.tip.loudness":      "当前已安装的全部配件的开火声音数值总和。注意：该属性在游戏中不起任何作用。游戏只判断是否安装了消音器，以此切换枪声以及人机能听到枪声的距离，这个数值本身从未被读取",
         "hidden.tooltip":           "标有 ? 的属性目前暂无数据（数据源尚未收录该武器）",
         "hidden.speculationHint":   "以上部分属性的解释是根据游戏原始数据字段名称进行的猜测，可能与其在游戏中的实际效果不完全一致。",
         // Price view
@@ -1242,6 +1248,7 @@ const _TRANSLATIONS = {
         "th.priceTooltip":        "如需切换游戏模式定价，请打开价格面板并切换游戏模式",
         "th.heatCoolBurn":        "发热/冷却/耐久损耗",
         "th.muzzleVelocity":      "膛口初速",
+        "th.loudness":            "开火声音",
         // Build manager modals
         "modal.save":             "保存配置",
         "modal.share":            "分享配置",
@@ -1711,6 +1718,7 @@ const _TRANSLATIONS = {
         "tracker.statLabel.cooling_factor":      "冷却",
         "tracker.statLabel.durability_burn_factor": "耐久损耗",
         "tracker.statLabel.velocity_modifier":   "膛口初速%",
+        "tracker.statLabel.loudness":            "开火声音",
         "tracker.search.placeholder":            "搜索物品...",
         "tracker.filter.all":                    "全部",
         "tracker.filter.weapons":                "武器",

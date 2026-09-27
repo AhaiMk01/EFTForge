@@ -526,6 +526,9 @@ window.EFTForge.tracker = (function () {
             const vSign = v >= 0 ? '+' : '';
             return vSign + parseFloat(v.toFixed(1)) + '%';
         }
+        if (statName === 'loudness') {
+            return (v > 0 ? '+' : '') + v;
+        }
         return _fmtVal(v);
     }
 

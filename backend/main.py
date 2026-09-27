@@ -248,6 +248,9 @@ def _migrate_items_db():
         if "velocity_modifier" not in existing:
             conn.execute(text("ALTER TABLE items ADD COLUMN velocity_modifier REAL"))
             conn.commit()
+        if "loudness" not in existing:
+            conn.execute(text("ALTER TABLE items ADD COLUMN loudness INTEGER"))
+            conn.commit()
         if "category_ids" not in existing:
             conn.execute(text("ALTER TABLE items ADD COLUMN category_ids TEXT"))
             conn.commit()
@@ -1163,6 +1166,7 @@ def get_allowed_items(slot_id: str, lang: str = "en", db: Session = Depends(get_
             "cooling_factor": item.cooling_factor,
             "durability_burn_factor": item.durability_burn_factor,
             "velocity_modifier": item.velocity_modifier,
+            "loudness": item.loudness,
             "icon_link": item.icon_link,
             "base_image_link": item.base_image_link,
             "conflicting_item_ids": item.conflicting_item_ids,
@@ -1222,6 +1226,7 @@ def get_allowed_items_batch(
                     "cooling_factor": item.cooling_factor,
                     "durability_burn_factor": item.durability_burn_factor,
                     "velocity_modifier": item.velocity_modifier,
+                    "loudness": item.loudness,
                     "icon_link": item.icon_link,
                     "base_image_link": item.base_image_link,
                     "conflicting_item_ids": item.conflicting_item_ids,
@@ -1856,6 +1861,7 @@ def combo_full(
             "cooling_factor": item.cooling_factor,
             "durability_burn_factor": item.durability_burn_factor,
             "velocity_modifier": item.velocity_modifier,
+            "loudness": item.loudness,
             "icon_link": item.icon_link,
             "base_image_link": item.base_image_link,
             "conflicting_item_ids": item.conflicting_item_ids,
@@ -2871,6 +2877,7 @@ def get_gun_init(
             "cooling_factor": item.cooling_factor,
             "durability_burn_factor": item.durability_burn_factor,
             "velocity_modifier": item.velocity_modifier,
+            "loudness": item.loudness,
             "icon_link": item.icon_link,
             "base_image_link": item.base_image_link,
             "conflicting_item_ids": item.conflicting_item_ids,
