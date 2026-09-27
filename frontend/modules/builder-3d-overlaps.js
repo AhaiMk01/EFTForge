@@ -5,8 +5,9 @@ window.EFTForge = window.EFTForge || {};
 //
 // Where one of our panels over the 3D view covers another, the one on top shows a faint
 // outline of the buried panel's edge, so neither gets lost under the other. Every panel
-// counts, dragged or fixed in place; the outline is drawn inside the top panel, in its
-// own stacking context, so it never shows through anything laid over that panel.
+// but the attachment picker and the advanced stats popover counts, dragged or fixed in
+// place; the outline is drawn inside the top panel, in its own stacking context, so it
+// never shows through anything laid over that panel.
 // ============================================================
 
 (function () {
@@ -23,10 +24,8 @@ window.EFTForge = window.EFTForge || {};
             if (shape) out.push({ host: dock, shape, radius: collapsed ? 0 : 8 });
         }
         for (const el of document.querySelectorAll("#b3d-hud .b3d-panel")) out.push({ host: el, shape: el });
-        const picker = document.querySelector("body.builder-3d .right-panel");
-        if (picker) out.push({ host: picker, shape: picker });
-        const popover = document.getElementById("hidden-stats-panel");
-        if (popover) out.push({ host: popover, shape: popover });
+        // Our attachment picker (the right panel) and the advanced stats popover never
+        // count: they neither outline what they cover nor get outlined under anything else.
         const shown = out.filter(p => _shown(p.host) && _shown(p.shape));
         // The viewer's diagnostics dock lives inside its frame, which lies under every panel
         // of ours: it only ever gets buried, at the box the frame reports for it.
@@ -67,7 +66,7 @@ window.EFTForge = window.EFTForge || {};
 
     function _layer(host) {
         let entry = _layers.get(host);
-        // A panel that rebuilds its contents (the tactical list, the popover) drops our layer.
+        // A panel that rebuilds its contents (the tactical list) drops our layer.
         if (!entry || entry.svg.parentNode !== host) {
             const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
             svg.setAttribute("class", "b3d-overlap");

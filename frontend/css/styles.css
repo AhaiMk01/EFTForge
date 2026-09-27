@@ -10051,9 +10051,9 @@ body.builder-3d .right-panel {
      and a soft light catching the top rim. */
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.015) 18%, rgba(255, 255, 255, 0) 40%),
-    rgba(22, 22, 24, 0.8);
-  backdrop-filter: blur(28px) saturate(170%) brightness(0.9);
-  -webkit-backdrop-filter: blur(28px) saturate(170%) brightness(0.9);
+    rgba(22, 22, 24, 0.55);
+  backdrop-filter: blur(20px) saturate(170%) brightness(0.9);
+  -webkit-backdrop-filter: blur(20px) saturate(170%) brightness(0.9);
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 14px;
   box-shadow:
