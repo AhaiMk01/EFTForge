@@ -40,6 +40,8 @@ window.EFTForge = window.EFTForge || {};
     let _nextId = 1;
     const _pending = new Map();   // id -> {resolve, reject, timer}
     let _queue = [];              // calls made before "ready"
+    let _viewMode = "orbit";      // the viewer's last "mode" event
+    let _resetOnOrbit = false;    // a new gun's reset waiting for the glide out of the sight picture
 
     // Build sync.
     let _nodeById = new Map();    // viewer part id -> our tree node
@@ -359,7 +361,13 @@ window.EFTForge = window.EFTForge || {};
             _setLoading(false);
             if (_tableKey && _tableOpen()) send("setSlotOpen", _tableKey);
             _flushFlashes();
-            if (gunChanged) send("reset");
+            // The viewer reports leaving the sight picture only once its glide out ends, and a
+            // reset meanwhile replaces that glide so the report never comes (our panels would
+            // stay in the sight picture). Hold the reset until the glide is done.
+            if (gunChanged) {
+                if (_viewMode === "sight") _resetOnOrbit = true;
+                else send("reset");
+            }
             onStats();
             _checkModels(payload.items, key);
         } catch (err) {
@@ -619,7 +627,11 @@ window.EFTForge = window.EFTForge || {};
                 else closePicker();
                 break;
             case "partclick": if (_tableOpen()) closePicker(); break;
-            case "mode": if (data === "sight") closePicker(); break;
+            case "mode":
+                _viewMode = data;
+                if (data === "sight") { closePicker(); _resetOnOrbit = false; }
+                else if (_resetOnOrbit) { _resetOnOrbit = false; send("reset"); }
+                break;
             default: break;
         }
         EFTForge.builder3dPanels?.onEvent(name, data);
@@ -987,6 +999,8 @@ window.EFTForge = window.EFTForge || {};
         _setLoading(true, { delayed: false });
         container.prepend(_stage);
         _ready = false;
+        _viewMode = "orbit";
+        _resetOnOrbit = false;
         _syncedKey = null;
         _syncedGunId = null;
         _notifiedMissing = "";
