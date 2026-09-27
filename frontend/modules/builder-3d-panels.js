@@ -18,6 +18,7 @@ window.EFTForge = window.EFTForge || {};
     const TACTICAL_POS_KEY = "eftforge_b3d_tactical_pos"; // {orbit: [fx, fy], sight: [fx, fy]}
     const ADS_POS_KEY = "eftforge_b3d_ads_pos";           // {sight: [fx, fy]}
     const RANGE_POS_KEY = "eftforge_b3d_range_pos";       // {sight: [fx, fy]}
+    const SKILLS_KEY = "eftforge_b3d_skills";             // {weapon, aimDrills, endurance}; Strength is the stats panel's
     const PANEL_MARGIN = 8; // a dragged panel keeps this far inside the view
     const RANGE_PRESETS = [10, 25, 50, 100, 300, 500, 1000];
     const SKILLS = [
@@ -34,6 +35,19 @@ window.EFTForge = window.EFTForge || {};
     const _write = (key, value) => { try { localStorage.setItem(key, value); } catch { /* private mode */ } };
 
     let _root = null, _api = null, _resizeObs = null;
+
+    // The skill levels we keep ourselves, so they survive a viewer on another origin (its own
+    // storage is not ours). Strength stays in the stats panel's key, the one level both share.
+    function _savedSkills() {
+        let saved = {};
+        try { saved = JSON.parse(_read(SKILLS_KEY)) || {}; } catch { /* keep the defaults */ }
+        const skills = {};
+        for (const [key] of SKILLS) {
+            const v = Number(saved[key]);
+            if (key !== "strength" && Number.isFinite(v)) skills[key] = Math.max(0, Math.min(ELITE, Math.round(v)));
+        }
+        return skills;
+    }
     const _s = {
         mode: "orbit", hasSights: false, slotsHidden: _read(SLOTS_HIDDEN_KEY) === "1",
         sight: { mode: "orbit" }, zoom: null, ads: null, range: null, display: null, devices: [],
@@ -196,6 +210,9 @@ window.EFTForge = window.EFTForge || {};
                 const next = {};
                 for (const i of skills.querySelectorAll("input")) next[i.dataset.key] = Number(i.value);
                 _send("setSkills", next);
+                const kept = { ...next };
+                delete kept.strength;
+                _write(SKILLS_KEY, JSON.stringify(kept));
                 // Strength is also our stats panel's Strength level: keep the two as one.
                 if (key === "strength") EFTForge.statsPanel?.setStrengthLevel(next.strength);
             });
@@ -585,6 +602,7 @@ window.EFTForge = window.EFTForge || {};
         if (!_api) return;
         _root.classList.remove("b3d-waiting");
         _send("setSlotsHidden", _s.slotsHidden);
+        _send("setSkills", { ..._savedSkills(), strength: EFTForge.state.currentStrengthLevel ?? 10 });
         try {
             const [range, display, ads, devices] = await Promise.all([
                 _api.call("rangeState"), _api.call("displayState"), _api.call("adsState"), _api.call("tacticalState"),
