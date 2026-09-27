@@ -1062,10 +1062,11 @@ window.EFTForge = window.EFTForge || {};
     }
 
     // The 2D builder's flashSlot (tree.js) after an install or removal: the same slot's box
-    // sweeps green or red in the 3D view, once the build it follows is drawn.
+    // sweeps green or red in the 3D view, once the build it follows is drawn. "reveal" is
+    // the faint white sweep on the child slots an install opens up.
     function flashSlot(parentNode, slotId, kind) {
         if (!isActive()) return;
-        _pendingFlashes.push({ parentNode, slotId, kind: kind === "remove" ? "remove" : "install" });
+        _pendingFlashes.push({ parentNode, slotId, kind: kind === "remove" || kind === "reveal" ? kind : "install" });
         _scheduleSync();
     }
 

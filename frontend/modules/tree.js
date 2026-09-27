@@ -463,6 +463,10 @@ async function installAttachment(parentNode, slotId, item) {
     if (childSlots.length > 0) {
         // Flash all newly revealed child slots with subtle grey
         const installedNode = parentNode.children[slotId];
+        // The 3D view sweeps the same new slot boxes.
+        if (installedNode) {
+            for (const cs of childSlots) EFTForge.builder3d?.flashSlot(installedNode, cs.id, "reveal");
+        }
         if (installedNode && installedNode._slotEls) {
             Object.values(installedNode._slotEls).forEach(el => {
                 el.classList.remove("slot-flash-reveal");
