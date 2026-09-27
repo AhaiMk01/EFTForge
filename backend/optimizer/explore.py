@@ -159,7 +159,15 @@ def explore_weapon_stream(db, weapon_id: str, params: OptimizeParams, tradeoff="
     # point the price/recoil tradeoffs use to size their sweep - see solve()'s own
     # use_true_ergo branch below, which is the only call that ever pays for it.
     use_true_ergo = params.use_true_ergo
-    params = replace(params, use_true_ergo=False, use_tchebycheff=False)
+    # An unpriced part's cost is unknown, so a curve that plots price can't place a
+    # build holding one. Keep them only on Ergonomics vs. Recoil, where price just
+    # breaks ties (see OptimizeParams.allow_unpriced).
+    params = replace(
+        params,
+        use_true_ergo=False,
+        use_tchebycheff=False,
+        allow_unpriced=params.allow_unpriced and tradeoff == "price",
+    )
     prepared = prepare_optimize_weapon(db, weapon_id, params)
     prepared.local_price_cleanup = tradeoff == "price"
     solutions = _ErgoFloorSolutions(prepared)

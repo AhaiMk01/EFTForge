@@ -2374,6 +2374,7 @@ def build_optimize(
     price_weight: float = Body(default=0.0),
     trader_levels: dict | None = Body(default=None),
     flea_available: bool = Body(default=True),
+    allow_unpriced: bool = Body(default=False),
     player_level: int | None = Body(default=None),
     strength_level: int = Body(default=10),
     equip_ergo_modifier: float = Body(default=0.0),
@@ -2440,6 +2441,7 @@ def build_optimize(
         price_weight,
         tuple(sorted((trader_levels or {}).items())),
         flea_available,
+        allow_unpriced,
         player_level,
         strength_level,
         equip_ergo_modifier,
@@ -2483,6 +2485,7 @@ def build_optimize(
         price_weight=price_weight,
         trader_levels=trader_levels,
         flea_available=flea_available,
+        allow_unpriced=allow_unpriced,
         player_level=player_level,
         game_mode=game_mode,
         strength_level=strength_level,
@@ -2515,6 +2518,7 @@ def build_stat_ranges(
     weapon_id: str = Body(...),
     trader_levels: dict | None = Body(default=None),
     flea_available: bool = Body(default=True),
+    allow_unpriced: bool = Body(default=False),
     player_level: int | None = Body(default=None),
     game_mode: str = Body(default="pvp"),
     db: Session = Depends(get_db),
@@ -2534,7 +2538,11 @@ def build_stat_ranges(
         raise HTTPException(status_code=404, detail="Weapon not found")
 
     params = OptimizeParams(
-        trader_levels=trader_levels, flea_available=flea_available, player_level=player_level, game_mode=game_mode
+        trader_levels=trader_levels,
+        flea_available=flea_available,
+        allow_unpriced=allow_unpriced,
+        player_level=player_level,
+        game_mode=game_mode,
     )
     with _solve_slot(_get_client_ip(request)):
         result = run_job("stat_ranges", weapon_id, params)
@@ -2549,6 +2557,7 @@ def build_moa_floor(
     weapon_id: str = Body(...),
     trader_levels: dict | None = Body(default=None),
     flea_available: bool = Body(default=True),
+    allow_unpriced: bool = Body(default=False),
     player_level: int | None = Body(default=None),
     game_mode: str = Body(default="pvp"),
     db: Session = Depends(get_db),
@@ -2569,7 +2578,11 @@ def build_moa_floor(
         raise HTTPException(status_code=404, detail="Weapon not found")
 
     params = OptimizeParams(
-        trader_levels=trader_levels, flea_available=flea_available, player_level=player_level, game_mode=game_mode
+        trader_levels=trader_levels,
+        flea_available=flea_available,
+        allow_unpriced=allow_unpriced,
+        player_level=player_level,
+        game_mode=game_mode,
     )
     with _solve_slot(_get_client_ip(request)):
         result = run_job("moa_floor", weapon_id, params)

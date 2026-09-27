@@ -134,6 +134,7 @@ window.EFTForge.optimizer = (function () {
     let _useTrueErgo = false;
     let _weightUiMode = 'triangle'; // 'triangle' | 'sliders'
     let _fleaAvailable = true;
+    let _allowUnpriced = true;
     let _preventOverswing = false;
     let _requireSuppressor = false;
 
@@ -995,6 +996,14 @@ window.EFTForge.optimizer = (function () {
         _refreshStatRanges();
     }
 
+    // Unpriced parts widen the candidate pool, so the mag/MOA slider ranges
+    // need a fresh fetch the same way a Flea/Trader Access change does.
+    function _setAllowUnpriced(value) {
+        _allowUnpriced = value;
+        document.getElementById('optimizer-unpriced-toggle')?.classList.toggle('active', value);
+        _refreshStatRanges();
+    }
+
     // Shares EFTForge.state.priceMode with the price panel's own PvP/PvE/PvP S
     // toggle (stats-panel.js) - same global setting, same persisted localStorage
     // key, so switching it here or there stays in sync everywhere. Solve prices
@@ -1395,6 +1404,7 @@ window.EFTForge.optimizer = (function () {
             useTrueErgo: _useTrueErgo,
             weightUiMode: _weightUiMode,
             fleaAvailable: _fleaAvailable,
+            allowUnpriced: _allowUnpriced,
             preventOverswing: _preventOverswing,
             requireSuppressor: _requireSuppressor,
             useExactMoaFloor: _useExactMoaFloor,
@@ -1418,6 +1428,7 @@ window.EFTForge.optimizer = (function () {
         _useTrueErgo = false;
         _weightUiMode = 'triangle';
         _fleaAvailable = true;
+        _allowUnpriced = true;
         _preventOverswing = false;
         _requireSuppressor = false;
         _useExactMoaFloor = true;
@@ -1437,6 +1448,7 @@ window.EFTForge.optimizer = (function () {
         if (typeof savedTrueErgo === 'boolean') _useTrueErgo = savedTrueErgo;
         if (saved.weightUiMode === 'sliders' || saved.weightUiMode === 'triangle') _weightUiMode = saved.weightUiMode;
         if (typeof saved.fleaAvailable === 'boolean') _fleaAvailable = saved.fleaAvailable;
+        if (typeof saved.allowUnpriced === 'boolean') _allowUnpriced = saved.allowUnpriced;
         if (typeof saved.preventOverswing === 'boolean') _preventOverswing = saved.preventOverswing;
         if (typeof saved.requireSuppressor === 'boolean') _requireSuppressor = saved.requireSuppressor;
         if (typeof saved.useExactMoaFloor === 'boolean') _useExactMoaFloor = saved.useExactMoaFloor;
@@ -1486,6 +1498,7 @@ window.EFTForge.optimizer = (function () {
             weapon_id: weaponId,
             trader_levels: state.traderLevels || null,
             flea_available: _fleaAvailable,
+            allow_unpriced: _allowUnpriced,
             game_mode: state.priceMode || 'pvp',
         };
         _statRangesPromise = fetch(`${EFTForge.config.API_BASE}/build/stat-ranges`, {
@@ -1512,6 +1525,7 @@ window.EFTForge.optimizer = (function () {
             weapon_id: weaponId,
             trader_levels: state.traderLevels || null,
             flea_available: _fleaAvailable,
+            allow_unpriced: _allowUnpriced,
             game_mode: state.priceMode || 'pvp',
         };
         fetch(`${EFTForge.config.API_BASE}/build/moa-floor`, {
@@ -2036,6 +2050,12 @@ window.EFTForge.optimizer = (function () {
                             <span class="compare-toggle-track"><span class="compare-toggle-knob"></span></span>
                         </button>
                     </div>
+                    <div class="optimizer-toggle-row">
+                        <span class="stat-label" title="${_escape(_t('optimizer.allowUnpricedTooltip'))}">${_t('optimizer.allowUnpriced')} <span class="optimizer-help-icon">?</span></span>
+                        <button type="button" class="compare-toggle${_allowUnpriced ? ' active' : ''}" id="optimizer-unpriced-toggle">
+                            <span class="compare-toggle-track"><span class="compare-toggle-knob"></span></span>
+                        </button>
+                    </div>
                     <div id="optimizer-trader-access-widget"></div>
                    </div>
                   </div>
@@ -2137,6 +2157,7 @@ window.EFTForge.optimizer = (function () {
         });
 
         document.getElementById('optimizer-flea-toggle').addEventListener('click', () => _setFleaAvailable(!_fleaAvailable));
+        document.getElementById('optimizer-unpriced-toggle').addEventListener('click', () => _setAllowUnpriced(!_allowUnpriced));
         document.getElementById('optimizer-price-mode-btns')?.addEventListener('click', (e) => {
             const btn = e.target.closest('.toggle-btn');
             if (!btn) return;
@@ -2147,6 +2168,7 @@ window.EFTForge.optimizer = (function () {
         });
         _wireSection('market', () => {
             _setFleaAvailable(true);
+            _setAllowUnpriced(true);
             _setGameMode('pvp');
             resetTraderLevels();
         });
@@ -2203,6 +2225,7 @@ window.EFTForge.optimizer = (function () {
             include_items: _includedModIds.length ? _includedModIds : null,
             exclude_items: _excludedModIds.length ? _excludedModIds : null,
             flea_available: _fleaAvailable,
+            allow_unpriced: _allowUnpriced,
             trader_levels: state.traderLevels || null,
             game_mode: state.priceMode || 'pvp',
             strength_level: state.currentStrengthLevel ?? 10,

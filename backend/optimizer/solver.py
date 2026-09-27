@@ -103,6 +103,14 @@ class OptimizeParams:
     max_moa: Optional[float] = None
     trader_levels: Optional[Dict[str, int]] = None
     flea_available: bool = True
+    # Admit parts with no accessible trader/flea price (Arena-only parts, barter-only
+    # and flea-banned parts) into the candidate pool (GitHub #50). Their cost is
+    # unknown, so they never count as free: the solver costs each one above every
+    # priced candidate, the reported totals leave them out and list them in
+    # unpriced_items, and a max_price budget drops them again since no build
+    # holding one can be proven to fit it. Explore also drops them on any curve
+    # that plots price (see explore.py).
+    allow_unpriced: bool = False
     player_level: Optional[int] = None
     # "pvp" | "pve" | "pvpSeason" - which game mode's flea prices to solve against.
     # Trader offers don't vary by mode, so this only ever filters ItemOffer's flea rows.
@@ -117,6 +125,11 @@ class OptimizeParams:
     selected_ubgl_ammo_id: Optional[str] = None
 
 
+def _admits_unpriced(params):
+    # A budget cap can't be checked against a part whose cost is unknown.
+    return params.allow_unpriced and params.max_price is None
+
+
 def _prepared_input_key(params):
     # Snapshot every setting used to load candidates, offers or selected ammo.
     # Keep mutable lists/dicts out of the key so later edits cannot hide a change.
@@ -126,6 +139,7 @@ def _prepared_input_key(params):
         tuple(params.exclude_categories or ()),
         None if params.trader_levels is None else tuple(sorted(params.trader_levels.items())),
         params.flea_available,
+        _admits_unpriced(params),
         params.player_level,
         params.game_mode,
         params.assume_full_mag,
@@ -309,8 +323,10 @@ def _load_candidates_and_prices(db, weapon_id: str, params: OptimizeParams):
     # selectable at price 0 even when no trader/flea sells them - they're genuinely
     # accessible, and a required slot may only be fillable by one of them.
     factory_ids = set(weapon.factory_attachment_ids.split(",")) if weapon.factory_attachment_ids else set()
+    admit_unpriced = _admits_unpriced(params)
     candidate_ids = []
     prices = {}
+    unpriced_ids = []
     for item_id in all_mod_ids:
         if item_id in exclude or item_id not in mods:
             continue
@@ -332,9 +348,15 @@ def _load_candidates_and_prices(db, weapon_id: str, params: OptimizeParams):
             # never prices most of them at all. Dropping those would silently shrink the
             # min-mag-capacity slider's range and make the constraint infeasible for
             # capacities that are genuinely obtainable, just not through a priced offer.
-            if item_id not in include and item_id not in factory_ids and not mods[item_id].magazine_capacity:
+            exempt = item_id in include or item_id in factory_ids or mods[item_id].magazine_capacity
+            if not exempt and not admit_unpriced:
                 continue
             best = {"price": 0, "currency": "RUB", "price_rub": 0, "vendor": None}
+            if not exempt:
+                # Admitted only by allow_unpriced. Set its solver cost after the loop,
+                # once every priced candidate is known, so it's never the cheap pick.
+                best["unpriced"] = True
+                unpriced_ids.append(item_id)
             # Factory parts really do cost 0 - they ship with the gun. The include/
             # magazine-capacity carve-outs above don't actually know a price, so flag
             # them as such; the manifest UI reads this to show "-" instead of "0₽".
@@ -342,6 +364,16 @@ def _load_candidates_and_prices(db, weapon_id: str, params: OptimizeParams):
                 best["no_price"] = True
         candidate_ids.append(item_id)
         prices[item_id] = best
+
+    if unpriced_ids:
+        # Cost every admitted unpriced part one ruble above the priciest priced
+        # candidate. Price tiebreaks, reskin dedup and Explore's cheaper-part cleanup
+        # then always prefer a priced part with the same stats, so an unpriced part
+        # only lands in a build when its stats earn the spot. Reported totals strip
+        # this solver-only cost again (see _known_price_rub).
+        placeholder = max((p["price_rub"] for p in prices.values() if not p.get("unpriced")), default=0) + 1
+        for item_id in unpriced_ids:
+            prices[item_id] = {**prices[item_id], "price_rub": placeholder}
 
     candidate_ids = _drop_dominated_reskins(compat_map, mods, candidate_ids, prices, include, factory_ids)
 
@@ -444,6 +476,10 @@ def optimize_weapon(
     result["metrics"] = {**input_metrics, **result.get("metrics", {})}
 
     if result["status"] in ("optimal", "feasible"):
+        # Report only what the build is known to cost. Parts admitted by allow_unpriced
+        # carried a solver-only placeholder cost; list them instead of pricing them.
+        result["unpriced_items"] = [i for i in result["selected_items"] if prices[i].get("unpriced")]
+        result["total_price_rub"] = _known_price_rub(result["selected_items"], prices)
         final_stats = _compute_stats(
             weapon, result["selected_items"], mods, params.strength_level, params.equip_ergo_modifier
         )
@@ -476,7 +512,10 @@ def optimize_weapon(
         # the solve (respects flea_available/trader_levels) - the manifest UI
         # renders from this instead of independently re-picking "cheapest overall"
         # client-side, which would ignore those same access filters.
-        result["item_prices"] = {item_id: prices[item_id] for item_id in result["selected_items"]}
+        result["item_prices"] = {
+            item_id: {**prices[item_id], "price_rub": 0} if prices[item_id].get("unpriced") else prices[item_id]
+            for item_id in result["selected_items"]
+        }
         # Per-item TED contribution, so the results-panel manifest can show the
         # same TED column the attachment table does. Contribution is marginal -
         # the build's TED minus what it would have without that one part - which is
@@ -510,6 +549,10 @@ def optimize_weapon(
 
     result["metrics"]["processing_ms"] = round((time.perf_counter() - started) * 1000, 3)
     return result
+
+
+def _known_price_rub(selected_items, prices):
+    return sum(prices[i]["price_rub"] for i in selected_items if not prices[i].get("unpriced"))
 
 
 def _load_best_offer_price(db, item_id, params, *, prepared=None):
@@ -633,6 +676,7 @@ def get_moa_floor(db, weapon_id: str, params: OptimizeParams) -> dict:
     base_params = OptimizeParams(
         trader_levels=params.trader_levels,
         flea_available=params.flea_available,
+        allow_unpriced=params.allow_unpriced,
         player_level=params.player_level,
         game_mode=params.game_mode,
         ergo_weight=0.0,
@@ -656,6 +700,7 @@ def get_moa_floor(db, weapon_id: str, params: OptimizeParams) -> dict:
         trial_params = OptimizeParams(
             trader_levels=params.trader_levels,
             flea_available=params.flea_available,
+            allow_unpriced=params.allow_unpriced,
             player_level=params.player_level,
             game_mode=params.game_mode,
             ergo_weight=0.0,
