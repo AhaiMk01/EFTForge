@@ -49,6 +49,8 @@ function _saveTraderLevels() {
     try {
         localStorage.setItem("eftforge_trader_levels", JSON.stringify(EFTForge.state.traderLevels));
     } catch (_) {}
+    // The 3D view's compact picker shows trader availability: refresh it at once.
+    EFTForge.builder3d?.onTraderLevelsChange();
 }
 
 // Shared trader-levels widget (master "All" row + one row per whitelisted
@@ -932,6 +934,8 @@ async function updateStatsPanel(data, { preloadedAmmo = null, preloadedUbglAmmo 
   EFTForge.state.lastHeatFactor           = data.heat_factor ?? null;
   EFTForge.state.lastCoolingFactor        = data.cooling_factor ?? null;
   EFTForge.state.lastDurabilityBurnFactor = data.durability_burn_factor ?? null;
+  // The 3D view aims with our totals, not its own sums.
+  EFTForge.builder3d?.onStats();
 
   const trueErgoClass = trueErgo >= 0 ? "positive" : "negative";
   const nearOverswing = trueErgo >= 0 && trueErgo < TED_WARN && EFTForge.state.currentEquipErgoModifier === 0;
@@ -1045,7 +1049,13 @@ async function updateStatsPanel(data, { preloadedAmmo = null, preloadedUbglAmmo 
   });
 
   // On first render, grow height from 0 so the tree slides down smoothly
-  if (isFirstRender) {
+  if (isFirstRender && content.scrollHeight === 0) {
+    // Rendered while hidden (the 3D view's current build panel collapsed): nothing to
+    // measure, so skip the reveal instead of pinning the panel at 0px for good.
+    content.style.height = "";
+    content.style.overflow = "";
+    content.style.opacity = "";
+  } else if (isFirstRender) {
     const targetHeight = content.scrollHeight;
     content.style.transition = "height 0.3s ease, opacity 0.25s ease";
     requestAnimationFrame(() => requestAnimationFrame(() => {

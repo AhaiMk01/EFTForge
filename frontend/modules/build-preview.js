@@ -1,6 +1,6 @@
 window.EFTForge = window.EFTForge || {};
 
-/* exported _bpBuildSptItemsForPairs, _bpWorkingLogoHtml, _bpToggleLogoHtml -- called from other modules */
+/* exported _bpBuildSptItemsForPairs, _bpWorkingLogoHtml, _bpToggleLogoHtml, _bpWalkTreeToSptItems -- called from other modules */
 
 // ============================================================
 // LIVE BUILD IMAGE PREVIEW
@@ -197,7 +197,9 @@ function _bpHex24(str) {
 // Walk an install tree ({children: {slotId: {item, children}}}) and build the
 // SPT-format items array. Each item needs: _id, _tpl, slotId (game name like
 // mod_barrel), parentId. We resolve slot names from EFTForge.state.slotCache.
-function _bpWalkTreeToSptItems(gun, tree) {
+// onNode(instanceId, node), when given, sees every tree node with the id its item
+// got, so the 3D view can map its slot keys back to our tree.
+function _bpWalkTreeToSptItems(gun, tree, onNode = null) {
     // Use a 24-char hex key for the gun instance so the API sees a valid ObjectId,
     // stable so parentId references in our attachments line up.
     const gunInstanceId = _bpHex24(gun.id + ":root");
@@ -207,6 +209,7 @@ function _bpWalkTreeToSptItems(gun, tree) {
         slotId:   "hideout",
         parentId: "hideout",
     }];
+    if (onNode && tree) onNode(gunInstanceId, tree);
 
     function walk(node, parentItemId, parentInstanceId) {
         const parentSlots = EFTForge.state.slotCache[parentItemId] || [];
@@ -228,6 +231,7 @@ function _bpWalkTreeToSptItems(gun, tree) {
                 slotId:   gameSlotName,
                 parentId: parentInstanceId,
             });
+            if (onNode) onNode(instanceId, child);
             if (!walk(child, child.item.id, instanceId)) return false;
         }
         return true;

@@ -24,6 +24,10 @@ window.EFTForge.config = {
     // until the user explicitly connects to EFTForge.com live services.
     COMMUNITY_DISABLED: !!(_desktop && _desktop.communityMode === "local"),
 
+    // The Kitbash! 3D viewer's embeddable page (an iframe, driven over postMessage).
+    // Null leaves the builder 2D only. Local dev serves the Kitbash! repo root on 8765.
+    VIEWER_URL: _isLocalDev && !_desktop ? "http://127.0.0.1:8765/viewer/frame.html" : null,
+
     // Static announcements fetched as fallback when the backend is unreachable.
     // Edit frontend/offline/announcements.json and deploy - nginx serves it at the same path in production.
     // Format: [{id, message, level, expires_at, dismissible}] - use string IDs like "maint-2026-05-25".

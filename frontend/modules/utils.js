@@ -91,8 +91,13 @@ function escapeHtml(str) {
 /* --- Panel loading overlay --- */
 
 function startPanelLoading(panelEl, delayMs = 0) {
-    const state = { overlay: null, timer: null };
+    const state = { overlay: null, timer: null, release: null };
     const show = () => {
+        // The 3D view spans the left panel and has its own loading veil: use that.
+        if (panelEl?.classList.contains("left-panel") && EFTForge.builder3d?.isActive()) {
+            state.release = EFTForge.builder3d.holdLoading();
+            return;
+        }
         const overlay = document.createElement("div");
         overlay.className = "panel-loading-overlay";
         panelEl.appendChild(overlay);
@@ -109,6 +114,7 @@ function startPanelLoading(panelEl, delayMs = 0) {
 function stopPanelLoading(state) {
     if (!state) return;
     if (state.timer) clearTimeout(state.timer);
+    if (state.release) state.release();
     if (state.overlay && state.overlay.isConnected) state.overlay.remove();
 }
 

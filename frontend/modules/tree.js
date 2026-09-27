@@ -311,6 +311,9 @@ function updateSlotIcon(parentNode, slotId, item) {
 
 function flashSlot(parentNode, slotId, type = "install") {
 
+    // The 3D view sweeps the same slot's box.
+    EFTForge.builder3d?.flashSlot(parentNode, slotId, type);
+
     const slotElement = findSlotElement(parentNode, slotId);
     if (!slotElement) return;
 

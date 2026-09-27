@@ -437,6 +437,9 @@ function initPanelResizer() {
         cancelAnimationFrame(resizeAnimFrame);
         resizeAnimFrame = requestAnimationFrame(() => {
             if (container.classList.contains("no-gun")) return;
+            // The 3D view stretches the left panel over the whole build area, which would read
+            // as far too wide here and overwrite the saved 2D width.
+            if (EFTForge.builder3d?.isActive()) return;
             const maxWidth = container.offsetWidth - MIN_RIGHT - resizer.offsetWidth;
             const current  = leftPanel.offsetWidth;
             if (current <= maxWidth) return;
@@ -885,6 +888,14 @@ function _renderAboutKitbash(kb) {
         const ver = document.getElementById("about-kitbash-version");
         const codename = typeof kb.codename === "string" ? ` (${kb.codename})` : "";
         ver.textContent = `${kb.commit.slice(0, 7)}${codename} - ${kb.date.slice(0, 10)}`;
+        // The release's own wordmark (assets/images/kitbash-wordmark-<codename>.png), else
+        // the plain one.
+        const mark = document.getElementById("about-kitbash-wordmark");
+        if (mark && typeof kb.codename === "string" && /^[a-z0-9-]+$/i.test(kb.codename)) {
+            mark.onerror = () => { mark.onerror = null; mark.src = "./assets/images/kitbash-for-eftforge-wordmark.png"; };
+            mark.src = `./assets/images/kitbash-wordmark-${kb.codename.toLowerCase()}.png`;
+            mark.alt = `Kitbash! ${kb.codename}`;
+        }
         ver.style.display = "";
         shown = true;
     }
@@ -956,7 +967,7 @@ function showAboutDialog() {
                 <div id="about-kitbash" style="display:none; flex-direction:column; gap:16px;">
                     <hr class="modal-divider" style="margin:0;" />
                     <div style="display:flex; align-items:center; justify-content:space-between; user-select:none;">
-                        <img src="./assets/images/kitbash-for-eftforge-wordmark.png" alt="Kitbash! for EFTForge" draggable="false" style="height:46px; width:auto; object-fit:contain; flex-shrink:0; -webkit-user-drag:none;" />
+                        <img id="about-kitbash-wordmark" src="./assets/images/kitbash-for-eftforge-wordmark.png" alt="Kitbash! for EFTForge" draggable="false" style="height:46px; width:auto; object-fit:contain; flex-shrink:0; -webkit-user-drag:none;" />
                         <div style="display:flex; flex-direction:column; align-items:flex-end; gap:5px; font-size:13px; color:#555; letter-spacing:1px;">
                             <span id="about-kitbash-version" style="display:none;"></span>
                             <span id="about-kitbash-game" style="display:none;"></span>

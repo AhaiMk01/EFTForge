@@ -349,6 +349,7 @@ function updateToggleUI() {
 function returnToGunSelection() {
 
     EFTForge.optimizer?.onBuildLeave();
+    EFTForge.builder3d?.onBuildLeave();
     EFTForge.tabs?.deactivateActiveTab();
 
     if (EFTForge.state.publishMode) {
@@ -616,6 +617,7 @@ async function selectGun(gun, liElement, { skipTreeRender = false, suppressPulse
         buildArea.classList.add("panel-enter");
         buildArea.addEventListener("animationend", () => buildArea.classList.remove("panel-enter"), { once: true });
         updateViewToggleLabels();
+        EFTForge.builder3d?.onGunOpen();
 
     // Reset right panel state
     document.getElementById("attachment-table-container").innerHTML = "";
