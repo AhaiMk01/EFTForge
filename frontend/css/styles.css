@@ -9886,6 +9886,11 @@ body.builder-3d #b3d-topleft #view-toggle {
 /* The compact picker switch, bottom right with the view buttons: styled as the full mag
    toggle (.mag-controls .compare-toggle), gold track and knob, label unchanged. */
 #b3d-picker-toggle { white-space: nowrap; flex-shrink: 0; margin-right: 8px; }
+
+/* The sight picture keeps the view clear: no top left controls, no picker switch. The
+   cluster only turns invisible, since the stats dock's default spot hangs below it. */
+body.builder-3d.b3d-sight #b3d-topleft { visibility: hidden; }
+body.builder-3d.b3d-sight #b3d-picker-toggle { display: none; }
 #b3d-picker-toggle.active { color: #555; }
 #b3d-picker-toggle.active:hover { color: #888; }
 #b3d-picker-toggle.active .compare-toggle-track { background: #1e1800; border-color: #f5c542; }
@@ -9913,13 +9918,14 @@ body.builder-3d #b3d-stats-dock {
   align-items: flex-start;
   pointer-events: auto;
   z-index: 2;
-  cursor: grab;
   touch-action: none;
 }
 
+/* Dragged panels keep the default cursor; they only stop text selecting while moving. */
 body.builder-3d #b3d-stats-dock.moving,
-body.builder-3d #b3d-stats-dock.moving * {
-  cursor: grabbing !important;
+body.builder-3d #b3d-stats-dock.moving *,
+.b3d-panel.moving,
+.b3d-panel.moving * {
   user-select: none;
 }
 
@@ -9944,14 +9950,37 @@ body.builder-3d #b3d-stats-dock.moving * {
    view. zoom, not transform, so it still lays out and hit-tests at its drawn size. */
 #b3d-stats-dock .b3d-dock-body { zoom: 0.9; }
 
+/* The build and price cards turn to frosted glass over the 3D view, like our other
+   panels there (.b3d-panel). */
+#b3d-stats-dock .b3d-dock-body .stats-section {
+  background: rgba(20, 20, 20, 0.82);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-color: #2a2a2a;
+}
+
+/* The advanced stats popover hangs off that panel, so it turns to the same glass. */
+body.builder-3d .hidden-stats-popover {
+  background: rgba(20, 20, 20, 0.82);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-color: #2a2a2a;
+  scrollbar-color: #444 transparent;
+}
+
+body.builder-3d .hidden-stats-popover::-webkit-scrollbar-track { background: transparent; }
+body.builder-3d .hidden-stats-popover::-webkit-scrollbar-thumb { border-color: transparent; background-clip: padding-box; }
+
 #b3d-stats-dock .b3d-dock-tab {
   flex: 0 0 auto;
   width: 22px;
   height: 62px;
   margin-top: 8px;
   padding: 0;
-  background: rgba(24, 24, 24, 0.9);
-  border: 1px solid #333;
+  background: rgba(20, 20, 20, 0.82);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid #2a2a2a;
   border-left: none;
   border-radius: 0 6px 6px 0;
   color: #aaa;
@@ -9973,18 +10002,19 @@ body.builder-3d #b3d-stats-dock.moving * {
   width: 56px;
   height: 56px;
   margin-top: 8px;
-  background: rgba(24, 24, 24, 0.9);
-  border: 1px solid #333;
+  background: rgba(20, 20, 20, 0.82);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid #2a2a2a;
   border-radius: 0;
   color: #aaa;
-  cursor: grab;
 }
 
 #b3d-stats-dock.collapsed .b3d-dock-handle svg { width: 26px; height: 26px; }
 
 #b3d-stats-dock.collapsed .b3d-dock-tab {
   height: 56px;
-  border-left: 1px solid #333;
+  border-left: 1px solid #2a2a2a;
   border-radius: 0 6px 6px 0;
 }
 
@@ -10019,9 +10049,48 @@ body.builder-3d.b3d-picker-open .right-panel {
   pointer-events: auto;
 }
 
-body.builder-3d.b3d-picker-open .optimizer-edge-tab { display: none; }
+body.builder-3d.b3d-picker-open .optimizer-edge-tab,
+body.builder-3d.b3d-sight .optimizer-edge-tab { display: none; }
+
+/* The 3D viewer and everything floating over it select no text (builder-3d.js blocks the
+   browser's context menu over the same parts). Text fields still take a selection. */
+body.builder-3d #main-container,
+body.builder-3d .hidden-stats-popover,
+.b3d-frame-select {
+  -webkit-user-select: none;
+  user-select: none;
+}
 
 /* --- Panels over the view --- */
+
+/* Our dropdown list for a dropdown inside the viewer's frame (builder-3d.js): the wrapper
+   sits on the frame's trigger, letting presses through, and hangs the list under it. */
+.b3d-frame-select {
+  position: fixed;
+  z-index: 450;
+  pointer-events: none;
+}
+
+.b3d-frame-select .custom-select-list {
+  pointer-events: auto;
+  right: auto;
+  min-width: 100%;
+}
+
+/* Where a panel covers another, a faint line on top traces the buried one's edge
+   (builder-3d-overlaps.js). */
+.b3d-overlap {
+  position: absolute;
+  z-index: 50;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.b3d-overlap rect {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 1;
+}
 
 .b3d-panel {
   position: absolute;
@@ -10091,10 +10160,16 @@ body.builder-3d.b3d-picker-open .optimizer-edge-tab { display: none; }
   align-items: center;
   gap: 6px;
   pointer-events: auto;
-  transition: right 0.2s ease;
+  transition: opacity 0.2s ease, visibility 0.2s;
 }
 
-body.b3d-picker-open .b3d-viewbtns { right: calc(var(--b3d-edge) + var(--b3d-picker-w) + 28px); }
+/* The attachment table covers their corner while it is open: fade them out rather than
+   push them aside, and give them back once it closes. */
+body.b3d-picker-open .b3d-viewbtns {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
 
 /* Sight bar, top centre. */
 .b3d-sightbar {
@@ -10141,6 +10216,7 @@ body.b3d-picker-open .b3d-viewbtns { right: calc(var(--b3d-edge) + var(--b3d-pic
   display: flex;
   flex-direction: column;
   gap: 6px;
+  touch-action: none;
 }
 
 .b3d-ads-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
@@ -10178,6 +10254,7 @@ body.b3d-picker-open .b3d-viewbtns { right: calc(var(--b3d-edge) + var(--b3d-pic
   display: flex;
   flex-direction: column;
   gap: 6px;
+  touch-action: none;
 }
 
 .b3d-range-dist { font-weight: 700; font-size: 14px; color: #eee; font-variant-numeric: tabular-nums; }
@@ -10195,6 +10272,7 @@ body.b3d-picker-open .b3d-viewbtns { right: calc(var(--b3d-edge) + var(--b3d-pic
   display: flex;
   flex-direction: column;
   padding: 0;
+  touch-action: none;
 }
 
 .b3d-tactical.sight { left: auto; bottom: auto; right: calc(var(--b3d-edge) + 16px); top: 96px; }

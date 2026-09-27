@@ -1457,6 +1457,16 @@ async function switchLang(lang) {
         if (target === activeTarget) show(target, _lastX, _lastY);
     }
 
+    // A tooltip for something outside our page (the 3D viewer's frame reports its own),
+    // at page coordinates; null text hides it. The next hover of ours takes over as usual.
+    const EXTERNAL = { dataset: {} };
+    function showAt(text, cx, cy) {
+        if (!text) { if (activeTarget === EXTERNAL) hide(); return; }
+        if (activeTarget === EXTERNAL && EXTERNAL.dataset.tooltip === text) { position(cx, cy); return; }
+        EXTERNAL.dataset.tooltip = text;
+        show(EXTERNAL, cx, cy);
+    }
+
     document.addEventListener("mousemove", (e) => {
         _lastX = e.clientX;
         _lastY = e.clientY;
@@ -1488,7 +1498,7 @@ async function switchLang(lang) {
     // Hide when mouse leaves the document
     document.addEventListener("mouseleave", hide, true);
 
-    window.EFTForge.tooltip = { hide, refresh };
+    window.EFTForge.tooltip = { hide, refresh, showAt };
 })();
 
 /* ===========================

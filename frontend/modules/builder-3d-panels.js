@@ -15,6 +15,10 @@ window.EFTForge = window.EFTForge || {};
 (function () {
     const SLOTS_HIDDEN_KEY = "eftforge_b3d_slots_hidden";
     const TACTICAL_FOLD_KEY = "eftforge_b3d_tactical_collapsed";
+    const TACTICAL_POS_KEY = "eftforge_b3d_tactical_pos"; // {orbit: [fx, fy], sight: [fx, fy]}
+    const ADS_POS_KEY = "eftforge_b3d_ads_pos";           // {sight: [fx, fy]}
+    const RANGE_POS_KEY = "eftforge_b3d_range_pos";       // {sight: [fx, fy]}
+    const PANEL_MARGIN = 8; // a dragged panel keeps this far inside the view
     const RANGE_PRESETS = [10, 25, 50, 100, 300, 500, 1000];
     const SKILLS = [
         ["weapon", "b3d.skillWeapon", "b3d.skillWeaponTip"],
@@ -29,11 +33,13 @@ window.EFTForge = window.EFTForge || {};
     const _read = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
     const _write = (key, value) => { try { localStorage.setItem(key, value); } catch { /* private mode */ } };
 
-    let _root = null, _api = null;
+    let _root = null, _api = null, _resizeObs = null;
     const _s = {
         mode: "orbit", hasSights: false, slotsHidden: _read(SLOTS_HIDDEN_KEY) === "1",
         sight: { mode: "orbit" }, zoom: null, ads: null, range: null, display: null, devices: [],
         tacticalCollapsed: _read(TACTICAL_FOLD_KEY) === "1",
+        diagOpen: false, // the viewer's own diagnostics dock (setAdsDiagnosticsPanel)
+        diagRect: null,  // where that dock is, in the frame's pixels (adsdiagnosticsrect)
     };
 
     // Small DOM helper: el("button.b3d-chip", {text, title, onclick, dataset}, children)
@@ -128,7 +134,7 @@ window.EFTForge = window.EFTForge || {};
         modes.replaceChildren();
         const byZoom = new Set(st.modes.map(m => m.zoom)).size > 1;
         st.modes.forEach((m, i) => {
-            const b = el("button.b3d-chip", { tip: _f("b3d.modeN", { n: i + 1 }), onclick: () => _send("selectScopeMode", i) });
+            const b = el("button.b3d-chip", { onclick: () => _send("selectScopeMode", i) });
             if (m.icon) b.append(el("img.b3d-reticle", { src: m.icon, alt: "" }));
             b.append(byZoom && m.zoom !== null ? `${m.zoom}x` : m.icon ? `${i + 1}` : _f("b3d.modeN", { n: i + 1 }));
             b.classList.toggle("active", i === st.modeIndex);
@@ -137,7 +143,6 @@ window.EFTForge = window.EFTForge || {};
         (st.zoomEnds || []).forEach((mag, end) => {
             modes.append(el("button.b3d-chip.b3d-zoom-end", {
                 text: `${+mag.toFixed(1)}x`, dataset: { end: String(end) },
-                tip: _t(end ? "b3d.highestPower" : "b3d.lowestPower"),
                 onclick: () => _send("setSightZoomEnd", end),
             }));
         });
@@ -202,18 +207,30 @@ window.EFTForge = window.EFTForge || {};
             _poolRow("oxygen", "b3d.breath", "b3d.maxBreathTip", "b3d.noDrainBreathTip"),
             el("div.b3d-ads-facts"),
             skills,
+            el("button.b3d-chip.b3d-diag-btn", { dataset: { label: "b3d.diagnostics", tipKey: "b3d.diagnosticsTip" },
+                onclick: () => _send("setAdsDiagnosticsPanel", !_s.diagOpen, _diagSpace()) }),
         ]);
+        _makeDraggable(ADS_DRAG);
         _root.append(_adsPanel);
+    }
+
+    // Where the viewer's diagnostics dock sits until the user moves it: top left, between
+    // the sight bar and our ADS panel (frame and HUD share the same box).
+    function _diagSpace() {
+        const top = _sightBar.offsetTop + _sightBar.offsetHeight + 12;
+        return { left: 16, top, bottom: _adsPanel.offsetTop - 10 };
     }
 
     function _renderAds() {
         const st = _s.ads;
         const btn = _sightBar?.querySelector(".b3d-ads-btn");
         if (btn) {
+            // The button names what a press switches to, and so does its tooltip.
             btn.hidden = !st?.available;
-            btn.classList.toggle("active", !!st?.on);
             btn.textContent = `${_t(st?.on ? "b3d.fixedEye" : "b3d.simAds")} (B)`;
-            btn.dataset.tooltip = _t("b3d.simAdsTip");
+            btn.dataset.tooltip = _t(st?.on ? "b3d.fixedEyeTip" : "b3d.simAdsTip");
+            // Repaint the tooltip if it is showing, so a click swaps it under the pointer.
+            EFTForge.tooltip?.refresh(btn);
         }
         _renderViewButtons();
         if (!_adsPanel) return;
@@ -222,6 +239,7 @@ window.EFTForge = window.EFTForge || {};
         if (!show) return;
         for (const n of _adsPanel.querySelectorAll("[data-label]")) n.textContent = _t(n.dataset.label);
         for (const n of _adsPanel.querySelectorAll("[data-tip-key]")) n.dataset.tooltip = _t(n.dataset.tipKey);
+        _adsPanel.querySelector(".b3d-diag-btn").classList.toggle("active", _s.diagOpen);
         const state = _adsPanel.querySelector(".b3d-ads-state");
         state.textContent = _t(st.aiming ? (st.holdingBreath ? "b3d.adsHolding" : "b3d.adsAiming") : "b3d.adsHip");
         state.classList.toggle("aiming", !!st.aiming);
@@ -265,6 +283,7 @@ window.EFTForge = window.EFTForge || {};
             lv.textContent = v >= ELITE ? _t("b3d.elite") : String(v);
             lv.classList.toggle("elite", v >= ELITE);
         }
+        _place(ADS_DRAG);
     }
 
     // --------------------------------------------------------- range panel
@@ -290,6 +309,7 @@ window.EFTForge = window.EFTForge || {};
             el("div.b3d-panel-head.b3d-display-head", {}, [el("span.b3d-mini-title", { dataset: { label: "b3d.display" } }), el("span.b3d-monitor")]),
             el("div.b3d-chip-row.b3d-ratios"),
         ]);
+        _makeDraggable(RANGE_DRAG);
         _root.append(_rangePanel);
     }
 
@@ -302,7 +322,7 @@ window.EFTForge = window.EFTForge || {};
             const presets = _rangePanel.querySelector(".b3d-presets");
             if (!presets.childElementCount) {
                 for (const m of RANGE_PRESETS.filter(m => m >= st.min && m <= st.max)) {
-                    presets.append(el("button.b3d-chip", { text: String(m), tip: `${m} m`, dataset: { distance: String(m) },
+                    presets.append(el("button.b3d-chip", { text: String(m), dataset: { distance: String(m) },
                         onclick: () => _send("setRange", { distance: m }) }));
                 }
             }
@@ -314,7 +334,7 @@ window.EFTForge = window.EFTForge || {};
                     return el("button.b3d-chip", { text: label === `b3d.target.${tg}` ? tg : label,
                         dataset: { target: tg }, onclick: () => _send("setRange", { target: tg, visible: true }) });
                 }),
-                el("button.b3d-chip.b3d-hide-target", { text: _t("b3d.hideTarget"), tip: _t("b3d.hideTargetTip"),
+                el("button.b3d-chip.b3d-hide-target", { text: _t("b3d.hideTarget"),
                     onclick: () => _send("setRange", { visible: !_s.range?.visible }) }),
             );
             _rangePanel.querySelector(".b3d-range-dist").textContent = `${Math.round(st.distance)} m`;
@@ -328,11 +348,11 @@ window.EFTForge = window.EFTForge || {};
         if (d) {
             _rangePanel.querySelector(".b3d-monitor").textContent = `${d.monitor.width}x${d.monitor.height}`;
             _rangePanel.querySelector(".b3d-ratios").replaceChildren(...d.aspectRatios.map(r => el("button.b3d-chip", {
-                text: r, tip: _t(r === d.native ? "b3d.ratioNativeTip" : "b3d.ratioStretchTip"),
-                onclick: () => _send("setAspectRatio", r),
+                text: r, onclick: () => _send("setAspectRatio", r),
             })));
             for (const b of _rangePanel.querySelectorAll(".b3d-ratios button")) b.classList.toggle("active", b.textContent === d.aspectRatio);
         }
+        _place(RANGE_DRAG);
     }
 
     // --------------------------------------------------------- tactical devices
@@ -366,12 +386,17 @@ window.EFTForge = window.EFTForge || {};
     function _renderTactical() {
         if (!_root) return;
         const devices = _s.devices || [];
-        if (!_tacPanel) { _tacPanel = el("div.b3d-panel.b3d-tactical"); _root.append(_tacPanel); }
+        if (!_tacPanel) { _tacPanel = el("div.b3d-panel.b3d-tactical"); _makeDraggable(TACTICAL_DRAG); _root.append(_tacPanel); }
         _tacPanel.hidden = !devices.length;
         _tacPanel.classList.toggle("sight", _s.mode === "sight");
         _tacPanel.classList.toggle("collapsed", _s.tacticalCollapsed);
         _tacPanel.replaceChildren();
         if (!devices.length) return;
+        _fillTactical(devices);
+        _place(TACTICAL_DRAG);
+    }
+
+    function _fillTactical(devices) {
         const lit = devices.filter(d => d.on).length;
         const fold = el("button.b3d-chip.b3d-fold", {
             text: _s.tacticalCollapsed ? "▴" : "▾", tip: _t(_s.tacticalCollapsed ? "b3d.showDevices" : "b3d.hideDevices"),
@@ -428,6 +453,92 @@ window.EFTForge = window.EFTForge || {};
         _tacPanel.append(list);
     }
 
+    // --------------------------------------------------------- dragged panels
+
+    // The tactical devices, the ADS panel and the range panel drag like the stats dock.
+    // Each remembers where it was left (a fraction of the view) under its storage key, by
+    // spot: the tactical panel keeps one per view mode, since the sight view gives it a
+    // default place of its own. A double-click puts a panel back where the stylesheet has it.
+    const TACTICAL_DRAG = { key: TACTICAL_POS_KEY, panel: () => _tacPanel, spot: () => (_s.mode === "sight" ? "sight" : "orbit") };
+    const ADS_DRAG = { key: ADS_POS_KEY, panel: () => _adsPanel, spot: () => "sight" };
+    const RANGE_DRAG = { key: RANGE_POS_KEY, panel: () => _rangePanel, spot: () => "sight" };
+    const DRAGGED = [TACTICAL_DRAG, ADS_DRAG, RANGE_DRAG];
+
+    function _positions(d) {
+        if (!d.saved) { try { d.saved = JSON.parse(_read(d.key)) || {}; } catch { d.saved = {}; } }
+        return d.saved;
+    }
+    function _savePosition(d, pos) {
+        const all = _positions(d);
+        if (pos) all[d.spot()] = pos; else delete all[d.spot()];
+        _write(d.key, JSON.stringify(all));
+    }
+
+    // Keep a dragged panel wholly inside the view; with no saved spot the stylesheet places it.
+    function _place(d) {
+        const panel = d.panel();
+        if (!panel || !_root || panel.hidden) return;
+        const pos = _positions(d)[d.spot()];
+        const st = panel.style;
+        if (!pos) { st.left = st.top = st.right = st.bottom = ""; return; }
+        const W = _root.clientWidth, H = _root.clientHeight;
+        const w = panel.offsetWidth, h = panel.offsetHeight;
+        st.left = Math.max(PANEL_MARGIN, Math.min(W - w - PANEL_MARGIN, pos[0] * W)) + "px";
+        st.top = Math.max(PANEL_MARGIN, Math.min(H - h - PANEL_MARGIN, pos[1] * H)) + "px";
+        st.right = st.bottom = "auto";
+    }
+    const _placeAll = () => DRAGGED.forEach(_place);
+
+    // Presses on buttons, sliders and a scrollbar use the panel, not move it.
+    function _startsDrag(e) {
+        const t = e.target;
+        if (!(t instanceof Element) || t.closest("button, input, select, a, [role=button]")) return false;
+        if (t.scrollHeight > t.clientHeight && e.offsetX >= t.clientWidth) return false;
+        return getComputedStyle(t).cursor !== "pointer";
+    }
+
+    let _drag = null;
+    function _makeDraggable(d) {
+        const panel = d.panel();
+        panel.addEventListener("pointerdown", (e) => {
+            if (e.button !== 0 || !_startsDrag(e)) return;
+            _drag = { d, panel, x: e.clientX, y: e.clientY, left: panel.offsetLeft, top: panel.offsetTop, moved: false, id: e.pointerId };
+        });
+        panel.addEventListener("dblclick", (e) => {
+            if (!_startsDrag(e)) return;
+            _savePosition(d, null);
+            _place(d);
+        });
+    }
+
+    document.addEventListener("pointermove", (e) => {
+        const g = _drag;
+        if (!g || e.pointerId !== g.id || g.panel !== g.d.panel()) return;
+        const dx = e.clientX - g.x, dy = e.clientY - g.y;
+        if (!g.moved) {
+            if (Math.hypot(dx, dy) < 4) return; // still a click
+            g.moved = true;
+            g.panel.setPointerCapture(e.pointerId);
+            g.panel.classList.add("moving");
+            window.getSelection()?.removeAllRanges();
+        }
+        _savePosition(g.d, [(g.left + dx) / _root.clientWidth, (g.top + dy) / _root.clientHeight]);
+        _place(g.d);
+    });
+    const _endDrag = (e) => {
+        const g = _drag;
+        if (!g || e.pointerId !== g.id) return;
+        _drag = null;
+        if (g.panel.hasPointerCapture(e.pointerId)) g.panel.releasePointerCapture(e.pointerId);
+        g.panel.classList.remove("moving");
+        // Remember where the panel stopped, not where the pointer went past an edge.
+        if (g.moved && g.panel === g.d.panel() && _root) {
+            _savePosition(g.d, [g.panel.offsetLeft / _root.clientWidth, g.panel.offsetTop / _root.clientHeight]);
+        }
+    };
+    document.addEventListener("pointerup", _endDrag);
+    document.addEventListener("pointercancel", _endDrag);
+
     // --------------------------------------------------------- lifecycle
 
     function _renderAll() {
@@ -446,16 +557,24 @@ window.EFTForge = window.EFTForge || {};
         _s.hasSights = false;
         _s.ads = null;
         _s.devices = [];
+        _s.diagOpen = false;
+        _s.diagRect = null;
+        document.body.classList.remove("b3d-sight");
         _root.classList.add("b3d-waiting");
         _buildViewButtons();
         _buildSightBar();
         _buildAdsPanel();
         _buildRangePanel();
         _tacPanel = null;
+        _resizeObs = new ResizeObserver(_placeAll);
+        _resizeObs.observe(_root);
         _renderAll();
     }
 
     function unmount() {
+        _resizeObs?.disconnect();
+        _resizeObs = null;
+        document.body.classList.remove("b3d-sight");
         _root = _api = null;
         _viewBtns = _sightBar = _fovNote = _adsPanel = _rangePanel = _tacPanel = null;
     }
@@ -484,6 +603,7 @@ window.EFTForge = window.EFTForge || {};
                 break;
             case "mode":
                 _s.mode = data;
+                document.body.classList.toggle("b3d-sight", data === "sight");
                 if (data === "sight") _hoverDevice(null);
                 _renderAll();
                 break;
@@ -496,6 +616,8 @@ window.EFTForge = window.EFTForge || {};
             case "range": _s.range = data; _renderRange(); break;
             case "display": _s.display = data; _renderRange(); break;
             case "tactical": _s.devices = data || []; _renderTactical(); break;
+            case "adsdiagnosticspanel": _s.diagOpen = !!data?.open; _renderAds(); break;
+            case "adsdiagnosticsrect": _s.diagRect = data || null; break;
             case "slotshidden":
                 _s.slotsHidden = !!data.hidden;
                 _write(SLOTS_HIDDEN_KEY, _s.slotsHidden ? "1" : "0");
@@ -505,5 +627,6 @@ window.EFTForge = window.EFTForge || {};
         }
     }
 
-    EFTForge.builder3dPanels = { mount, unmount, onReady, onEvent, render: _renderAll };
+    EFTForge.builder3dPanels = { mount, unmount, onReady, onEvent, render: _renderAll,
+        diagnosticsRect: () => (_s.diagOpen ? _s.diagRect : null) };
 })();

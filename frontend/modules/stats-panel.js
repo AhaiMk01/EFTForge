@@ -1378,8 +1378,16 @@ document.addEventListener("keydown", (e) => {
     }
 });
 
-window.addEventListener("resize", () => {
+// Re-anchor the popover after its button moves (a window resize, the 3D stats dock
+// dragged or scrolled), and close it once the button is no longer shown (dock collapsed).
+function _followHiddenStatsBtn() {
     const panel = document.getElementById("hidden-stats-panel");
     const btn = document.getElementById("hidden-stats-btn");
-    if (panel && btn) _positionHiddenStatsPanel(panel, btn);
-});
+    if (!panel || !panel.classList.contains("show")) return;
+    if (!btn || !btn.getClientRects().length) { _removeHiddenStatsPanel(); return; }
+    _positionHiddenStatsPanel(panel, btn);
+}
+
+window.addEventListener("resize", _followHiddenStatsBtn);
+
+EFTForge.statsPanel = { followHiddenStatsBtn: _followHiddenStatsBtn };

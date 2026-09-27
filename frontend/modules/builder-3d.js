@@ -160,6 +160,7 @@ window.EFTForge = window.EFTForge || {};
                 // The Arcadia watermark: level with our top left controls, clear of the edge tab.
                 watermarkTop: "20px",
                 watermarkRight: "46px",
+                watermarkHeight: "50px",
                 slotRadius: "0px",
                 slotShadow: "none",
                 slotHotShadow: "none",
@@ -171,6 +172,55 @@ window.EFTForge = window.EFTForge || {};
                 // Incompatible parts keep the normal cursor; a click explains (partblocked).
                 menuDisabledCursor: "pointer",
                 flashColor: "rgba(220, 50, 50, 0.45)",
+                // Part icons shimmer while they load, as ours do (eft-img-shimmer in styles.css).
+                iconLoading: "linear-gradient(90deg, #181818 25%, #242424 50%, #181818 75%)",
+                // The viewer's diagnostics dock in our design language: the frosted glass of
+                // .b3d-panel, .b3d-chip buttons, .b3d-mini-title headings, gold and teal accents.
+                diagBg: "rgba(20, 20, 20, 0.82)",
+                diagBackdrop: "blur(6px)",
+                diagBorder: "#2a2a2a",
+                diagRadius: "8px",
+                diagShadow: "0 6px 12px -2px rgba(0, 0, 0, 0.7)",
+                diagFont: '"Bender", Arial, sans-serif',
+                diagDragCursor: "default", // our dragged panels keep the default cursor
+                diagText: "#ccc",
+                diagMuted: "#888",
+                diagDim: "#777",
+                diagValue: "#eee",
+                diagLine: "#2a2a2a",
+                diagRowLine: "#1f1f1f",
+                diagFocus: "#f5c542",
+                diagTitle: "#f5c542",
+                diagTitleBar: "3px solid #f5c542",
+                diagTitlePad: "8px",
+                diagSection: "#f5c542",
+                diagSectionBar: "#333",
+                diagBtnBg: "#1a1a1a",
+                diagBtnColor: "#ccc",
+                diagBtnBorder: "#333",
+                diagBtnRadius: "4px",
+                diagBtnHoverBg: "#252525",
+                diagBtnHoverColor: "#fff",
+                diagBtnHoverBorder: "#444",
+                diagBtnOnBg: "#333",
+                diagBtnOnColor: "#f5c542",
+                diagBtnOnBorder: "#444",
+                // The history window's trigger as our .custom-select-trigger; its list is ours.
+                diagSelectRadius: "999px",
+                diagSelectBg: "#1a1a1a",
+                diagSelectBorder: "#444",
+                diagSelectColor: "#eee",
+                diagSelectArrow: "#888",
+                diagLive: "#888",
+                diagAim: "#00c8b4",
+                diagFrozen: "#f5c542",
+                diagScrollbar: "#444",
+                diagGrid: "#2a2a2a",
+                diagChartText: "#777",
+                diagZero: "#3a3a3a",
+                diagChartBg: "rgba(0, 0, 0, 0.25)",
+                diagOverswing: "#f5c542",
+                diagSway: "#00c8b4",
                 // Hover: the outline takes the slot's colour and the fill lifts, as our buttons do.
                 slotHoverBorder: "currentColor",
                 slotHoverBg: "rgba(37, 37, 37, 0.92)",
@@ -507,6 +557,14 @@ window.EFTForge = window.EFTForge || {};
             case "parthover": _onPartHover(data); break;
             case "partpick": _onPartPick(data); break;
             case "partblocked": _onPartBlocked(data); break;
+            case "select": _frameSelect(data); break;
+            case "tooltip": {
+                // The frame's own tooltips (the diagnostics dock), drawn as ours.
+                const f = _frame?.getBoundingClientRect();
+                if (data && f) EFTForge.tooltip?.showAt(data.text, f.left + data.x, f.top + data.y);
+                else EFTForge.tooltip?.showAt(null);
+                break;
+            }
             case "partmenu":
                 // A menu moving to another slot reports the old one closing after the new
                 // one is ours: only a close of the current menu ends it.
@@ -522,6 +580,71 @@ window.EFTForge = window.EFTForge || {};
         }
         EFTForge.builder3dPanels?.onEvent(name, data);
     }
+
+    // --------------------------------------------------------- frame dropdowns
+
+    // A dropdown in the frame (the diagnostics dock's history window) opens our own list,
+    // the custom select's (setupCustomSelect in app.js), under the trigger the frame drew;
+    // the pick goes back to the frame.
+    let _frameList = null; // {el, id}
+
+    function _closeFrameSelect(tell) {
+        if (!_frameList) return;
+        const { el, id } = _frameList;
+        _frameList = null;
+        el.remove();
+        if (tell) send("pickSelect", id, null);
+    }
+
+    function _frameSelect(data) {
+        _closeFrameSelect(false);
+        if (!data || !_frame) return;
+        const f = _frame.getBoundingClientRect(), r = data.rect;
+        const wrapper = document.createElement("div");
+        wrapper.className = "custom-select-wrapper open b3d-frame-select";
+        Object.assign(wrapper.style, {
+            left: f.left + r.left + "px", top: f.top + r.top + "px",
+            width: r.right - r.left + "px", height: r.bottom - r.top + "px",
+        });
+        const list = document.createElement("div");
+        list.className = "custom-select-list";
+        list.setAttribute("role", "listbox");
+        data.options.forEach((opt, i) => {
+            const item = document.createElement("div");
+            item.className = "custom-select-option" + (opt.value === data.value ? " selected" : "");
+            item.setAttribute("role", "option");
+            item.style.setProperty("--i", i);
+            const label = document.createElement("span");
+            label.className = "marquee-text";
+            label.textContent = opt.label;
+            item.appendChild(label);
+            item.addEventListener("click", () => {
+                _closeFrameSelect(false);
+                send("pickSelect", data.id, opt.value);
+            });
+            list.appendChild(item);
+        });
+        wrapper.appendChild(list);
+        document.body.appendChild(wrapper);
+        _frameList = { el: wrapper, id: data.id };
+    }
+
+    // A press anywhere else on our page, or Esc, closes it unpicked. Presses inside the
+    // frame never reach us; the frame closes it itself and tells us (select null).
+    document.addEventListener("pointerdown", (e) => {
+        if (_frameList && !_frameList.el.contains(e.target)) _closeFrameSelect(true);
+    }, true);
+    document.addEventListener("keydown", (e) => {
+        if (!_frameList || e.key !== "Escape") return;
+        e.stopPropagation();
+        _closeFrameSelect(true);
+    }, true);
+
+    // No browser context menu anywhere in the 3D viewer, as inside the frame itself. Only the
+    // default goes: our own right-click actions (removing a part from the table) still run.
+    document.addEventListener("contextmenu", (e) => {
+        if (isActive() && e.target.closest?.("#main-container, .hidden-stats-popover, .b3d-frame-select")) e.preventDefault();
+    });
 
     // --------------------------------------------------------- keys
 
@@ -606,6 +729,7 @@ window.EFTForge = window.EFTForge || {};
         // something bigger to drag it by.
         _dock.innerHTML = `<div class="b3d-dock-body"></div><div class="b3d-dock-handle" aria-hidden="true">${_HANDLE_SVG}</div><button class="b3d-dock-tab" type="button"></button>`;
         _dockBody = _dock.querySelector(".b3d-dock-body");
+        _dockBody.addEventListener("scroll", () => EFTForge.statsPanel?.followHiddenStatsBtn(), { passive: true });
         area.appendChild(_dock);
         new ResizeObserver(() => _placeDock()).observe(_dock);
         _initDockDrag();
@@ -675,6 +799,8 @@ window.EFTForge = window.EFTForge || {};
         y = Math.max(DOCK_MARGIN, Math.min(H - h - DOCK_MARGIN, y));
         _dock.style.left = x + "px";
         _dock.style.top = y + "px";
+        // The advanced stats popover hangs off a button in here; take it along.
+        EFTForge.statsPanel?.followHiddenStatsBtn();
     }
 
     // Anything the user clicks to use rather than to move the panel.
@@ -724,6 +850,11 @@ window.EFTForge = window.EFTForge || {};
                 const st = _dockState();
                 st.pos = [_dock.offsetLeft / area.clientWidth, _dock.offsetTop / area.clientHeight];
                 _saveDock(st);
+                // Swallow the click the drag ends with, so it doesn't count as a click
+                // outside the popovers (the advanced stats) and close them.
+                const swallow = (ev) => ev.stopPropagation();
+                window.addEventListener("click", swallow, { capture: true, once: true });
+                setTimeout(() => window.removeEventListener("click", swallow, true), 0);
             }
             if (!drag.moved && drag.onTab && e.type === "pointerup") {
                 const s = _dockState();
@@ -827,6 +958,8 @@ window.EFTForge = window.EFTForge || {};
     function _leave3d({ rerender = true } = {}) {
         if (!isActive()) return;
         closePicker();
+        EFTForge.tooltip?.showAt(null); // one of the frame's, which it can no longer hide
+        _closeFrameSelect(false);
         clearTimeout(_readyTimer);
         for (const p of _pending.values()) { clearTimeout(p.timer); p.reject(new Error("3D view closed")); }
         _pending.clear();
@@ -942,8 +1075,15 @@ window.EFTForge = window.EFTForge || {};
         };
     })();
 
+    // Back to the orbit view from the sight picture (a build tab switch always lands there);
+    // the viewer ignores it outside the sight picture.
+    function leaveSight() {
+        if (isActive()) send("exitSight");
+    }
+
     EFTForge.builder3d = {
         isActive, setMode, setPickerStyle, onGunOpen, onBuildLeave, onStats, onTraderLevelsChange, prefetch, closePicker,
+        leaveSight,
         flashConflict, flashSlot, partName, holdLoading,
         call, send,
         get mode() { return _mode; },

@@ -330,6 +330,9 @@ async function _activateTab(tabId) {
     _serializeActiveTab();
     EFTForge.state.activeTabId = tabId;
 
+    // Another build always opens in the 3D orbit view, never the sight picture it was left in.
+    EFTForge.builder3d?.leaveSight();
+
     // Snapshot the attribution BEFORE loading. loadBuildFromPayload ends with its
     // own syncBuildDisplayName(), and at that point selectGun has already cleared
     // EFTForge.state.communityBuild - so it takes the saved-builds branch and
