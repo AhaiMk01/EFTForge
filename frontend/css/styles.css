@@ -1041,20 +1041,44 @@ header:not(.header-expanded) .header-nav-btn-icon {
   transition: --blob-color 1s ease;
 }
 
-/* Gun modding background */
-.container:not(.no-gun) {
-  background:
-    radial-gradient(ellipse 100% 100% at 50% 50%, transparent 20%, rgba(0,0,0,0.72) 100%),
-    radial-gradient(ellipse 70% 70% at 85% 90%, var(--blob-color), transparent 70%),
-    radial-gradient(circle, rgba(255,255,255,0.11) 1px, transparent 1px),
-    linear-gradient(160deg, #141414 0%, #111111 50%, #0f0e0b 100%);
-  background-size: 100% 100%, 100% 100%, 30px 30px, 100% 100%;
-  background-position: 0 0, 0 0, var(--dot-parallax-pos, 0px 0px), 0 0;
-  background-attachment: scroll, scroll, fixed, scroll;
+/* Page background, behind both the gun list and the build area (index.html #page-bg).
+   The gradient, the dot grid and the glow with its vignette are separate layers, so the
+   cursor parallax (app.js) only moves the dots' own GPU layer: no repaint, no style
+   recalc. The dots' tiles start at the viewport's corner (app.js sets their
+   background-position), as the page's fixed grid always has. */
+.container {
+  position: relative;
 }
 
-.container:not(.no-gun) .left-panel,
-.container:not(.no-gun) .right-panel {
+#page-bg {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background: linear-gradient(160deg, #141414 0%, #111111 50%, #0f0e0b 100%);
+}
+
+/* A tile of slack on every side, so the shifted grid never shows an edge. */
+#page-bg-dots {
+  position: absolute;
+  inset: -30px;
+  background: radial-gradient(circle, rgba(255,255,255,0.11) 1px, transparent 1px);
+  background-size: 30px 30px;
+  will-change: transform;
+}
+
+#page-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 100% 100% at 50% 50%, transparent 20%, rgba(0,0,0,0.72) 100%),
+    radial-gradient(ellipse 70% 70% at 85% 90%, var(--blob-color), transparent 70%);
+}
+
+.container .left-panel,
+.container .right-panel {
   background-color: transparent;
 }
 
@@ -1063,14 +1087,6 @@ header:not(.header-expanded) .header-nav-btn-icon {
   flex: 1 1 100%;
   width: 100% !important;
   overflow-y: auto;
-  background:
-    radial-gradient(ellipse 100% 100% at 50% 50%, transparent 20%, rgba(0,0,0,0.72) 100%),
-    radial-gradient(ellipse 70% 70% at 85% 90%, var(--blob-color), transparent 70%),
-    radial-gradient(circle, rgba(255,255,255,0.11) 1px, transparent 1px),
-    linear-gradient(160deg, #141414 0%, #111111 50%, #0f0e0b 100%);
-  background-size: 100% 100%, 100% 100%, 30px 30px, 100% 100%;
-  background-position: 0 0, 0 0, var(--dot-parallax-pos, 0px 0px), 0 0;
-  background-attachment: scroll, scroll, fixed, scroll;
 }
 
 .container.no-gun .right-panel {

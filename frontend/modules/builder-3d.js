@@ -119,6 +119,12 @@ window.EFTForge = window.EFTForge || {};
         queued.forEach(run => run());
         send("setLanguage", EFTForge.state.lang === "zh" ? "zh" : "en");
         send("setHudStyle", _hudStyle());
+        send("setPointerTracking", true);
+        // app.js loads after us, so we hook the parallax here rather than at load.
+        if (!_parallaxHooked && EFTForge.dotParallax) {
+            _parallaxHooked = true;
+            EFTForge.dotParallax.onChange(_sendParallax);
+        }
         _sendBackdrop();
         onAimSettings();
         EFTForge.builder3dPanels?.onReady();
@@ -252,26 +258,39 @@ window.EFTForge = window.EFTForge || {};
         const root = getComputedStyle(document.documentElement);
         const blob = root.getPropertyValue("--blob-color").trim() || "rgba(245, 197, 66, 0.1)";
         const rect = _frame.getBoundingClientRect();
-        const container = document.getElementById("main-container");
-        const par = (getComputedStyle(container).getPropertyValue("--dot-parallax-pos") || "").match(/(-?[\d.]+)px\s+(-?[\d.]+)px/);
-        const px = par ? parseFloat(par[1]) : 0, py = par ? parseFloat(par[2]) : 0;
         return { layers: [
             { type: "linear", angle: 160, stops: [[0, "#141414"], [0.5, "#111111"], [1, "#0f0e0b"]] },
-            // The page's dots are fixed to the viewport: line ours up with them.
-            { type: "dots", spacing: 30, radius: 1, color: "rgba(255, 255, 255, 0.11)", offset: [px - rect.left, py - rect.top] },
+            // The page's dots are fixed to the viewport: line ours up with them. The
+            // parallax shift goes separately (setBackdropOffset), so the cursor never repaints.
+            { type: "dots", spacing: 30, radius: 1, color: "rgba(255, 255, 255, 0.11)", offset: [-rect.left, -rect.top] },
             { type: "radial", x: 0.85, y: 0.9, rx: 0.7, ry: 0.7, stops: [[0, blob], [0.7, _clearOf(blob)]] },
             { type: "radial", x: 0.5, y: 0.5, rx: 1, ry: 1, stops: [[0.2, "rgba(0, 0, 0, 0)"], [1, "rgba(0, 0, 0, 0.72)"]] },
         ] };
     }
 
-    let _lastBackdrop = "";
+    let _lastBackdrop = "", _lastParallax = "", _parallaxHooked = false;
     function _sendBackdrop() {
         if (!_ready) return;
         const spec = _backdropSpec();
         const key = JSON.stringify(spec);
-        if (key === _lastBackdrop) return;
-        _lastBackdrop = key;
-        send("setBackdrop", spec);
+        if (key !== _lastBackdrop) {
+            _lastBackdrop = key;
+            send("setBackdrop", spec);
+        }
+        _sendParallax();
+    }
+
+    // The page's dot parallax (app.js), snapped to whole device pixels: each change redraws
+    // the whole 3D view, and the grid only moves about one pixel per few hundred pixels
+    // of cursor travel, so this keeps it to a handful of redraws across the screen.
+    function _sendParallax() {
+        if (!_ready || !isActive() || !EFTForge.dotParallax) return;
+        const dpr = window.devicePixelRatio || 1;
+        const [x, y] = EFTForge.dotParallax.offset.map(v => Math.round(v * dpr) / dpr);
+        const key = `${x} ${y}`;
+        if (key === _lastParallax) return;
+        _lastParallax = key;
+        send("setBackdropOffset", x, y);
     }
 
     // --blob-color eases over 1s (styles.css): follow it for a little longer than that.
@@ -287,8 +306,14 @@ window.EFTForge = window.EFTForge || {};
         _blobFrame = requestAnimationFrame(step);
     }
 
-    new MutationObserver(() => { if (isActive()) _followBlob(); })
-        .observe(document.documentElement, { attributes: true, attributeFilter: ["style"] });
+    // Only a change of the glow's colour (utils.js, inline on the root) repaints the
+    // viewer's backdrop.
+    let _lastBlob = document.documentElement.style.getPropertyValue("--blob-color");
+    new MutationObserver(() => {
+        if (!isActive()) return;
+        const blob = document.documentElement.style.getPropertyValue("--blob-color");
+        if (blob !== _lastBlob) { _lastBlob = blob; _followBlob(); }
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ["style"] });
 
     // --------------------------------------------------------- build sync
 
@@ -562,6 +587,12 @@ window.EFTForge = window.EFTForge || {};
 
     function _onEvent(name, data) {
         switch (name) {
+            case "pointer": {
+                // The page's dot grid follows the cursor over the view as it does elsewhere.
+                const f = _frame?.getBoundingClientRect();
+                if (data && f) EFTForge.dotParallax?.pointer(f.left + data.x, f.top + data.y);
+                return;
+            }
             case "slotclick": _onSlotClick(data); break;
             case "slotrightclick": _onSlotRightClick(data); break;
             case "parthover": _onPartHover(data); break;
@@ -956,6 +987,7 @@ window.EFTForge = window.EFTForge || {};
         _notifiedMissing = "";
         _sentNames.clear();
         _lastBackdrop = "";
+        _lastParallax = "";
         clearTimeout(_readyTimer);
         _readyTimer = setTimeout(() => { if (!_ready) _fail("timed out"); }, READY_TIMEOUT_MS);
         EFTForge.builder3dPanels?.mount(_hud, { call, send });

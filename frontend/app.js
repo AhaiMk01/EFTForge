@@ -2170,22 +2170,52 @@ async function switchLang(lang) {
 =========================== */
 
 (function () {
+    const STRENGTH = 7;
+    const dots = document.getElementById("page-bg-dots");
+    const container = document.getElementById("main-container");
+    const listeners = new Set();
     let _rafPending = false;
     let _mouseX = 0, _mouseY = 0;
+    let _offset = [0, 0];
 
-    document.addEventListener("mousemove", e => {
-        _mouseX = e.clientX;
-        _mouseY = e.clientY;
+    // Only the dots' own layer moves (styles.css #page-bg-dots): a transform, so the
+    // compositor shifts it without a style recalc or a repaint.
+    function _apply() {
+        _rafPending = false;
+        const x = (_mouseX / window.innerWidth  - 0.5) * STRENGTH;
+        const y = (_mouseY / window.innerHeight - 0.5) * STRENGTH;
+        if (x === _offset[0] && y === _offset[1]) return;
+        _offset = [x, y];
+        dots.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+        listeners.forEach(fn => fn(x, y));
+    }
+
+    // Page coordinates. The 3D view's iframe keeps its mouse moves to itself, so
+    // builder-3d.js reports them here too.
+    function pointer(x, y) {
+        _mouseX = x;
+        _mouseY = y;
         if (_rafPending) return;
         _rafPending = true;
-        requestAnimationFrame(() => {
-            _rafPending = false;
-            const cx = _mouseX / window.innerWidth  - 0.5;
-            const cy = _mouseY / window.innerHeight - 0.5;
-            const strength = 7;
-            document.documentElement.style.setProperty("--dot-parallax-pos", `${cx * strength}px ${cy * strength}px`);
-        });
-    });
+        requestAnimationFrame(_apply);
+    }
+
+    // Start the tiles at the viewport's corner, wherever the build area sits.
+    function _align() {
+        const r = container.getBoundingClientRect();
+        dots.style.backgroundPosition = `${-r.left}px ${-r.top}px`;
+    }
+
+    document.addEventListener("mousemove", e => pointer(e.clientX, e.clientY), { passive: true });
+    new ResizeObserver(_align).observe(container);
+    _align();
+    window.EFTForge = window.EFTForge || {};
+    EFTForge.dotParallax = {
+        pointer,
+        // The current shift in CSS pixels, and a callback for every change.
+        get offset() { return _offset; },
+        onChange(fn) { listeners.add(fn); },
+    };
 }());
 
 function _checkUrlBuildParam() {
