@@ -10452,3 +10452,36 @@ body.b3d-picker-open .b3d-viewbtns {
 .b3d-tac-mode { font-size: 11px; color: #777; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .b3d-tac-device.powered .b3d-tac-mode { color: #bbb; }
 .b3d-tac-note { padding: 6px 10px; border-top: 1px solid #1f1f1f; font-size: 11px; line-height: 1.35; color: #f5c542; }
+
+/* Muzzle smoke, sight picture only: the right column between the tactical devices and the
+   range panel (its bottom and height come from the panels script). */
+.b3d-smoke {
+  right: calc(var(--b3d-edge) + 16px);
+  bottom: 60px;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #444 transparent;
+  touch-action: none;
+}
+
+.b3d-smoke-rpm { font-size: 11px; color: #777; font-variant-numeric: tabular-nums; }
+.b3d-smoke-fire .b3d-chip { flex: 1; padding: 4px 6px; }
+.b3d-smoke-show { align-items: center; }
+.b3d-smoke-tabs .b3d-chip { flex: 1; padding: 4px 6px; }
+.b3d-smoke-show .b3d-chip { flex: 1; padding: 4px 6px; }
+.b3d-smoke-show-label { font-size: 11px; color: #888; width: 56px; }
+.b3d-smoke-rows { border-top: 1px solid #2a2a2a; padding-top: 6px; }
+.b3d-smoke-row { display: flex; gap: 8px; padding: 2px 0; }
+.b3d-smoke-k { flex: 1; color: #888; }
+.b3d-smoke-v { color: #eee; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.b3d-smoke-sub { font-size: 11px; color: #777; padding: 0 0 2px 8px; font-variant-numeric: tabular-nums; }
+.b3d-smoke-maps-head { font-size: 11px; color: #bbb; padding-top: 6px; }
+.b3d-smoke-maps { display: flex; gap: 6px; padding-top: 4px; }
+.b3d-smoke-maps figure { margin: 0; }
+.b3d-smoke-map { display: block; border: 1px solid #2a2a2a; border-radius: 4px; }
+.b3d-smoke-maps figcaption { font-size: 10px; color: #777; padding-top: 2px; }
+.b3d-smoke-note { border-top: 1px solid #2a2a2a; padding-top: 6px; font-size: 10px; line-height: 1.35; color: #666; }

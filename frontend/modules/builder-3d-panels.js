@@ -11,6 +11,7 @@ window.EFTForge = window.EFTForge || {};
 //   - range panel: target distance, paper target, range world on or off (and the key
 //     colour behind the weapon while it is off), aspect ratio
 //   - tactical devices: power and mode per light or laser
+//   - muzzle smoke and flash (sight picture): fire shots to see them, and how much each makes
 // ============================================================
 
 (function () {
@@ -19,6 +20,12 @@ window.EFTForge = window.EFTForge || {};
     const TACTICAL_POS_KEY = "eftforge_b3d_tactical_pos"; // {orbit: [fx, fy], sight: [fx, fy]}
     const ADS_POS_KEY = "eftforge_b3d_ads_pos";           // {sight: [fx, fy]}
     const RANGE_POS_KEY = "eftforge_b3d_range_pos";       // {sight: [fx, fy]}
+    const SMOKE_POS_KEY = "eftforge_b3d_smoke_pos";       // {sight: [fx, fy]}
+    const SMOKE_FOLD_KEY = "eftforge_b3d_smoke_collapsed";
+    const SMOKE_SHOWN_KEY = "eftforge_b3d_smoke_shown";
+    const MUZZLE_SHOW_KEY = "eftforge_b3d_muzzle_show"; // {smoke, flash}: which the viewer draws
+    const SMOKE_TAB_KEY = "eftforge_b3d_smoke_tab";       // "smoke" or "flash": the stats shown while both draw
+    const SMOKE_BURST = 10; // the viewer's smoke event counts a burst of this many
     const SKILLS_KEY = "eftforge_b3d_skills";             // {weapon, aimDrills, endurance}; Strength is the stats panel's
     const PANEL_MARGIN = 8; // a dragged panel keeps this far inside the view
     const RANGE_PRESETS = [10, 25, 50, 100, 300, 500, 1000];
@@ -62,6 +69,15 @@ window.EFTForge = window.EFTForge || {};
         mode: "orbit", hasSights: false, slotsHidden: _read(SLOTS_HIDDEN_KEY) === "1",
         sight: { mode: "orbit" }, zoom: null, ads: null, range: null, display: null, devices: [],
         tacticalCollapsed: _read(TACTICAL_FOLD_KEY) === "1",
+        smoke: null, smokeCollapsed: _read(SMOKE_FOLD_KEY) === "1", smokeHeld: false,
+        smokeShown: _read(SMOKE_SHOWN_KEY) === "1", // the sight bar's smoke button; hidden until asked for
+        smokeTab: _read(SMOKE_TAB_KEY) === "flash" ? "flash" : "smoke",
+        // At least one stays on: a saved state with neither shows both.
+        muzzleShow: (() => {
+            let s = { smoke: true, flash: true };
+            try { s = { ...s, ...JSON.parse(_read(MUZZLE_SHOW_KEY)) }; } catch { /* keep both */ }
+            return s.smoke || s.flash ? s : { smoke: true, flash: true };
+        })(),
         diagOpen: false, // the viewer's own diagnostics dock (setAdsDiagnosticsPanel)
         diagRect: null,  // where that dock is, in the frame's pixels (adsdiagnosticsrect)
     };
@@ -131,6 +147,12 @@ window.EFTForge = window.EFTForge || {};
             el("span.b3d-sight-fov"),
             el("span.b3d-sight-hint"),
             el("button.b3d-chip.b3d-ads-btn", { onclick: () => _send("setAdsSim", !_s.ads?.on) }),
+            el("button.b3d-chip.b3d-smoke-btn", { onclick: () => {
+                _s.smokeShown = !_s.smokeShown;
+                _write(SMOKE_SHOWN_KEY, _s.smokeShown ? "1" : "0");
+                if (!_s.smokeShown) _holdSmoke(false);
+                _renderSmoke();
+            } }),
         ]);
         _fovNote = el("div.b3d-fovnote");
         _root.append(_sightBar, _fovNote);
@@ -185,6 +207,7 @@ window.EFTForge = window.EFTForge || {};
         ].join(" · ");
         if (st.zoom) _renderZoom(st.zoom);
         _renderAds();
+        _renderSmokeButton();
     }
 
     function _renderZoom(z) {
@@ -415,6 +438,7 @@ window.EFTForge = window.EFTForge || {};
             for (const b of _rangePanel.querySelectorAll(".b3d-ratios button")) b.classList.toggle("active", b.textContent === d.aspectRatio);
         }
         _place(RANGE_DRAG);
+        _place(SMOKE_DRAG);
     }
 
     // --------------------------------------------------------- tactical devices
@@ -456,12 +480,13 @@ window.EFTForge = window.EFTForge || {};
         if (!devices.length) return;
         _fillTactical(devices);
         _place(TACTICAL_DRAG);
+        _place(SMOKE_DRAG);
     }
 
     function _fillTactical(devices) {
         const lit = devices.filter(d => d.on).length;
         const fold = el("button.b3d-chip.b3d-fold", {
-            text: _s.tacticalCollapsed ? "▴" : "▾", tip: _t(_s.tacticalCollapsed ? "b3d.showDevices" : "b3d.hideDevices"),
+            text: _s.tacticalCollapsed ? "▾" : "▴", tip: _t(_s.tacticalCollapsed ? "b3d.showDevices" : "b3d.hideDevices"),
             onclick: () => {
                 _s.tacticalCollapsed = !_s.tacticalCollapsed;
                 _write(TACTICAL_FOLD_KEY, _s.tacticalCollapsed ? "1" : "0");
@@ -518,6 +543,214 @@ window.EFTForge = window.EFTForge || {};
         if (devices.some(d => d.on && d.limited)) _tacPanel.append(el("div.b3d-tac-note", { text: _t("b3d.lightsLimited") }));
     }
 
+    // --------------------------------------------------------- muzzle smoke
+
+    // Cover in cm²·s: the area of fully opaque smoke it amounts to, times how long it hangs.
+    const _cover = (m2s) => { const v = m2s * 1e4; return v < 10 ? v.toFixed(1) : String(Math.round(v)); };
+    const _span = ([a, b]) => (a === b ? String(a) : `${a}-${b}`);
+
+    let _smokePanel = null;
+
+    // Paint one of the viewer's smoke maps: white where smoke hung, on the map's own fixed
+    // scale so two builds compare at a glance. Side on we mark the bore and the muzzle,
+    // from the eye the aim point and the reticle circle the aim stat counts.
+    function _smokeMap(map, kind, width, tint = [255, 255, 255]) {
+        const cols = map.cols || map.size, rows = map.rows || map.size;
+        const height = Math.round(width * rows / cols);
+        const cells = document.createElement("canvas");
+        cells.width = cols;
+        cells.height = rows;
+        const cx = cells.getContext("2d"), img = cx.createImageData(cols, rows);
+        map.data.forEach((v, i) => img.data.set([...tint, Math.round(255 * Math.sqrt(Math.min(1, v / map.scale)))], i * 4));
+        cx.putImageData(img, 0, 0);
+        const dpr = window.devicePixelRatio || 1;
+        const canvas = el("canvas.b3d-smoke-map", { width: String(width * dpr), height: String(height * dpr),
+            style: `width: ${width}px; height: ${height}px` });
+        const g = canvas.getContext("2d");
+        g.scale(dpr, dpr);
+        g.fillStyle = "#0b0b0b";
+        g.fillRect(0, 0, width, height);
+        g.imageSmoothingEnabled = true;
+        g.drawImage(cells, 0, 0, width, height);
+        g.strokeStyle = "#f5c542";
+        g.lineWidth = 1;
+        if (kind === "side") {
+            const span = map.ahead[1] - map.ahead[0];
+            const x = -map.ahead[0] / span * width, y = map.up[1] / (map.up[1] - map.up[0]) * height;
+            g.setLineDash([3, 3]);
+            g.beginPath(); g.moveTo(0, y); g.lineTo(width, y); g.stroke();
+            g.setLineDash([]);
+            g.beginPath(); g.moveTo(x, y - 5); g.lineTo(x, y + 5); g.stroke();
+            g.fillStyle = "#777";
+            g.font = "10px Bender, Arial, sans-serif";
+            // Metres on the smoke's map, quarter metres on the flame's shorter one.
+            const step = map.ahead[1] > 2 ? 1 : 0.25;
+            for (let m = step; m <= map.ahead[1] + 1e-6; m += step) {
+                g.fillText(step < 1 ? `${Math.round(m * 100)} cm` : `${m} m`, x + m / span * width - 10, height - 3);
+            }
+        } else {
+            const r = Math.tan(map.aimRadius * Math.PI / 180) / Math.tan(map.halfAngle * Math.PI / 180) * width / 2;
+            g.beginPath(); g.arc(width / 2, height / 2, r, 0, Math.PI * 2); g.stroke();
+            g.beginPath();
+            g.moveTo(width / 2 - 3, height / 2); g.lineTo(width / 2 + 3, height / 2);
+            g.moveTo(width / 2, height / 2 - 3); g.lineTo(width / 2, height / 2 + 3);
+            g.stroke();
+        }
+        return canvas;
+    }
+
+    // The sight bar's switch for the panel: lit while it shows, gone for a build with no smoke.
+    function _renderSmokeButton() {
+        const btn = _sightBar?.querySelector(".b3d-smoke-btn");
+        if (!btn) return;
+        btn.hidden = !_s.smoke;
+        btn.textContent = _t("b3d.smoke");
+        btn.dataset.tooltip = _t(_s.smokeShown ? "b3d.hideSmokePanel" : "b3d.showSmokePanel");
+        btn.classList.toggle("active", _s.smokeShown);
+    }
+    function _holdSmoke(on) {
+        if (on === _s.smokeHeld) return;
+        _s.smokeHeld = on;
+        _send("setSmokeFiring", on);
+        _smokePanel?.querySelector(".b3d-smoke-hold")?.classList.toggle("active", on);
+    }
+
+    function _renderSmoke() {
+        if (!_root) return;
+        const st = _s.smoke;
+        if (!_smokePanel) { _smokePanel = el("div.b3d-panel.b3d-smoke"); _makeDraggable(SMOKE_DRAG); _root.append(_smokePanel); }
+        _renderSmokeButton();
+        _smokePanel.hidden = !st || _s.mode !== "sight" || !_s.smokeShown;
+        _smokePanel.classList.toggle("collapsed", _s.smokeCollapsed);
+        _smokePanel.replaceChildren();
+        if (_smokePanel.hidden) return;
+        const fold = el("button.b3d-chip.b3d-fold", {
+            text: _s.smokeCollapsed ? "▾" : "▴", tip: _t(_s.smokeCollapsed ? "b3d.showSmoke" : "b3d.hideSmoke"),
+            onclick: () => {
+                _s.smokeCollapsed = !_s.smokeCollapsed;
+                _write(SMOKE_FOLD_KEY, _s.smokeCollapsed ? "1" : "0");
+                _renderSmoke();
+            },
+        });
+        // We hold the trigger only while the button is pressed.
+        const hold = el("button.b3d-chip.b3d-smoke-hold", { text: _t("b3d.smokeHold"), tip: _t("b3d.smokeHoldTip") });
+        hold.classList.toggle("active", _s.smokeHeld);
+        hold.addEventListener("pointerdown", (e) => { hold.setPointerCapture(e.pointerId); _holdSmoke(true); });
+        hold.addEventListener("pointerup", () => _holdSmoke(false));
+        hold.addEventListener("pointercancel", () => _holdSmoke(false));
+        _smokePanel.append(
+            el("div.b3d-panel-head", {}, [
+                el("span.b3d-mini-title", { text: _t("b3d.smoke") }),
+                el("span.b3d-smoke-rpm", { text: `${st.rpm} RPM` }),
+                fold,
+            ]),
+            el("div.b3d-chip-row.b3d-smoke-fire", {}, [
+                el("button.b3d-chip", { text: _t("b3d.smokeShot"), tip: _t("b3d.smokeShotTip"),
+                    onclick: () => _send("fireSmoke", { shots: 1 }) }),
+                el("button.b3d-chip", { text: _f("b3d.smokeBurst", { n: SMOKE_BURST }), tip: _f("b3d.smokeBurstTip", { n: SMOKE_BURST }),
+                    onclick: () => _send("fireSmoke", { shots: SMOKE_BURST }) }),
+                hold,
+                el("button.b3d-chip", { text: _t("b3d.smokeClear"), tip: _t("b3d.smokeClearTip"),
+                    onclick: () => _send("clearSmoke") }),
+            ]),
+            // We let the user look at the smoke or the flash alone; both keep running while hidden.
+            el("div.b3d-chip-row.b3d-smoke-show", {}, [
+                el("span.b3d-smoke-show-label", { text: _t("b3d.muzzleShow") }),
+                ...[["smoke", "b3d.muzzleShowSmoke"], ["flash", "b3d.muzzleShowFlash"]].map(([key, label]) => {
+                    const b = el("button.b3d-chip", { text: _t(label), "aria-pressed": String(_s.muzzleShow[key]),
+                        onclick: () => {
+                            const next = { ..._s.muzzleShow, [key]: !_s.muzzleShow[key] };
+                            if (!next.smoke && !next.flash) return; // we keep the last one on
+                            _s.muzzleShow = next;
+                            _write(MUZZLE_SHOW_KEY, JSON.stringify(_s.muzzleShow));
+                            _send("setMuzzleEffects", _s.muzzleShow);
+                            _renderSmoke();
+                        } });
+                    b.classList.toggle("active", _s.muzzleShow[key]);
+                    return b;
+                }),
+            ]),
+        );
+        if (!_s.smokeCollapsed) {
+            const fl = st.flash; // an older viewer sends no flash
+            // One section at a time: with both shown we let tabs pick it, otherwise the one that shows.
+            const both = _s.muzzleShow.smoke && _s.muzzleShow.flash && !!fl;
+            const tab = both ? _s.smokeTab : _s.muzzleShow.smoke || !fl ? "smoke" : "flash";
+            if (both) {
+                _smokePanel.append(el("div.b3d-chip-row.b3d-smoke-tabs", {}, [["smoke", "b3d.tabSmoke"], ["flash", "b3d.tabFlash"]].map(([key, label]) => {
+                    const b = el("button.b3d-chip", { text: _t(label), onclick: () => {
+                        _s.smokeTab = key;
+                        _write(SMOKE_TAB_KEY, key);
+                        _renderSmoke();
+                    } });
+                    b.classList.toggle("active", tab === key);
+                    return b;
+                })));
+            }
+            const rows = el("div.b3d-smoke-rows");
+            const row = (key, value, sub) => {
+                rows.append(el("div.b3d-smoke-row", {}, [el("span.b3d-smoke-k", { text: key }), el("span.b3d-smoke-v", { text: value })]));
+                if (sub) rows.append(el("div.b3d-smoke-sub", { text: sub }));
+            };
+            const mapPair = (head, pair, sideKey, eyeKey, tint) => {
+                rows.append(el("div.b3d-smoke-maps-head", { text: head }));
+                rows.append(el("div.b3d-smoke-maps", {}, [
+                    el("figure", {}, [_smokeMap(pair.side, "side", 168, tint), el("figcaption", { text: _t(sideKey) })]),
+                    el("figure", {}, [_smokeMap(pair.eye, "eye", 96, tint), el("figcaption", { text: _t(eyeKey) })]),
+                ]));
+            };
+            if (tab === "smoke") {
+                const one = st.perShot, all = st.cover;
+                row(_t("b3d.smokePerShot"), `${_cover(one.total)} cm²·s`,
+                    _f("b3d.smokeSplitShot", { m: _cover(one.muzzle), p: _cover(one.port) }));
+                row(_f("b3d.smokeBurstTotal", { n: st.shots }), `${_cover(all.total)} cm²·s`,
+                    _f("b3d.smokeSplitBurst", { m: _cover(all.muzzle), p: _cover(all.port), t: _cover(all.trail), s: st.duration.toFixed(1) }));
+                row(_t("b3d.smokePuffs"), st.puffsPerShot.muzzle.toFixed(1),
+                    st.puffs.filter(q => !q.port).map(q => `${_span(q.count)} × ${q.size.toFixed(1)} m, ${+q.lifetime.toFixed(2)} s`).join(" · "));
+                if (st.puffsPerShot.port) row(_t("b3d.smokePortPuffs"), st.puffsPerShot.port.toFixed(1));
+                if (st.trail) {
+                    row(_t("b3d.smokeTrail"), _f("b3d.smokeTrailAfter", { n: st.trail.shotsToStart }),
+                        _f("b3d.smokeTrailHangs", { s: st.trail.time.toFixed(1) }));
+                } else row(_t("b3d.smokeTrail"), _t("b3d.smokeNone"));
+                if (st.droppedPuffs > 0) row(_t("b3d.smokeDropped"), st.droppedPuffs.toFixed(1), _t("b3d.smokeDroppedTip"));
+                // Where it goes: an older viewer sends no placement.
+                if (st.aim && st.maps) {
+                    row(_f("b3d.smokeAim", { deg: st.aim.radius }), _f("b3d.smokeAimPeak", { pct: Math.round(st.aim.peak * 100) }),
+                        _f("b3d.smokeAimTotal", { pct: Math.round(st.aim.total * 100) }));
+                    row(_t("b3d.smokeWithin"), `${st.medianAhead.toFixed(2)} m`, _t("b3d.smokeWithinSub"));
+                    mapPair(_f("b3d.smokeMapsHead", { n: st.shots }), st.maps, "b3d.smokeMapSide", "b3d.smokeMapEye");
+                }
+                _smokePanel.append(rows, el("div.b3d-smoke-note", { text: _t("b3d.smokeNote") }));
+            } else {
+                row(_t("b3d.flashPerShot"), fl.jets ? `${(fl.exposure * 1e4).toFixed(2)} cm²·s` : _t("b3d.smokeNone"),
+                    fl.jets ? _f("b3d.flashSub", { jets: fl.jets, pct: Math.round(fl.chance * 100), n: fl.quads.toFixed(1),
+                        area: Math.round(fl.area * 1e4) }) : "");
+                row(_t("b3d.flashSparks"), fl.sparksPerShot.toFixed(1));
+                row(_t("b3d.flashHaze"), fl.haze.toFixed(2));
+                row(_t("b3d.flashLight"), _t(fl.light ? "b3d.flashLightOn" : "b3d.smokeNone"), fl.light ? _t("b3d.flashLightSub") : "");
+                if (fl.maps) {
+                    row(_f("b3d.flashAim", { deg: st.aim.radius }), `${(fl.aim * 100).toFixed(3)} %·s`, _t("b3d.flashAimSub"));
+                    row(_t("b3d.flashAhead"), `${Math.round(fl.meanAhead * 100)} cm`, _t("b3d.flashAheadSub"));
+                    mapPair(_t("b3d.flashMapsHead"), fl.maps, "b3d.flashMapSide", "b3d.flashMapEye", [255, 170, 90]);
+                }
+                _smokePanel.append(rows, el("div.b3d-smoke-note", { text: _t("b3d.flashNote") }));
+            }
+        }
+        _place(SMOKE_DRAG);
+    }
+
+    // Left where the stylesheet has it, the panel goes in the right column: above the range
+    // panel and below the tactical devices, scrolling when the room between them runs short.
+    function _placeSmokeDefault() {
+        const H = _root.clientHeight, st = _smokePanel.style;
+        const range = _rangePanel && !_rangePanel.hidden ? _rangePanel : null;
+        const tac = _tacPanel && !_tacPanel.hidden ? _tacPanel : null;
+        const bottom = range ? H - range.offsetTop + PANEL_MARGIN : 60;
+        const top = tac ? tac.offsetTop + tac.offsetHeight + PANEL_MARGIN : 96;
+        st.bottom = bottom + "px";
+        st.maxHeight = Math.max(80, H - bottom - top) + "px";
+    }
+
     // --------------------------------------------------------- dragged panels
 
     // The tactical devices, the ADS panel and the range panel drag like the stats dock.
@@ -527,7 +760,9 @@ window.EFTForge = window.EFTForge || {};
     const TACTICAL_DRAG = { key: TACTICAL_POS_KEY, panel: () => _tacPanel, spot: () => (_s.mode === "sight" ? "sight" : "orbit") };
     const ADS_DRAG = { key: ADS_POS_KEY, panel: () => _adsPanel, spot: () => "sight" };
     const RANGE_DRAG = { key: RANGE_POS_KEY, panel: () => _rangePanel, spot: () => "sight" };
-    const DRAGGED = [TACTICAL_DRAG, ADS_DRAG, RANGE_DRAG];
+    const SMOKE_DRAG = { key: SMOKE_POS_KEY, panel: () => _smokePanel, spot: () => "sight", place: () => _placeSmokeDefault() };
+    // The smoke panel last: its own place depends on the others'.
+    const DRAGGED = [TACTICAL_DRAG, ADS_DRAG, RANGE_DRAG, SMOKE_DRAG];
 
     function _positions(d) {
         if (!d.saved) { try { d.saved = JSON.parse(_read(d.key)) || {}; } catch { d.saved = {}; } }
@@ -545,8 +780,13 @@ window.EFTForge = window.EFTForge || {};
         if (!panel || !_root || panel.hidden) return;
         const pos = _positions(d)[d.spot()];
         const st = panel.style;
-        if (!pos) { st.left = st.top = st.right = st.bottom = ""; return; }
+        if (!pos) {
+            st.left = st.top = st.right = st.bottom = st.maxHeight = "";
+            d.place?.();
+            return;
+        }
         const W = _root.clientWidth, H = _root.clientHeight;
+        if (d.place) st.maxHeight = (H - 2 * PANEL_MARGIN) + "px";
         const w = panel.offsetWidth, h = panel.offsetHeight;
         st.left = Math.max(PANEL_MARGIN, Math.min(W - w - PANEL_MARGIN, pos[0] * W)) + "px";
         st.top = Math.max(PANEL_MARGIN, Math.min(H - h - PANEL_MARGIN, pos[1] * H)) + "px";
@@ -589,6 +829,7 @@ window.EFTForge = window.EFTForge || {};
         }
         _savePosition(g.d, [(g.left + dx) / _root.clientWidth, (g.top + dy) / _root.clientHeight]);
         _place(g.d);
+        if (g.d !== SMOKE_DRAG) _place(SMOKE_DRAG);
     });
     const _endDrag = (e) => {
         const g = _drag;
@@ -652,6 +893,7 @@ window.EFTForge = window.EFTForge || {};
         _renderAds();
         _renderRange();
         _renderTactical();
+        _renderSmoke();
     }
 
     function mount(root, api) {
@@ -662,6 +904,8 @@ window.EFTForge = window.EFTForge || {};
         _s.hasSights = false;
         _s.ads = null;
         _s.devices = [];
+        _s.smoke = null;
+        _s.smokeHeld = false;
         _s.diagOpen = false;
         _s.diagRect = null;
         document.body.classList.remove("b3d-sight");
@@ -671,7 +915,7 @@ window.EFTForge = window.EFTForge || {};
         _buildAdsPanel();
         _buildRangePanel();
         _buildUnhide();
-        _tacPanel = null;
+        _tacPanel = _smokePanel = null;
         _resizeObs = new ResizeObserver(_placeAll);
         _resizeObs.observe(_root);
         _renderAll();
@@ -685,7 +929,7 @@ window.EFTForge = window.EFTForge || {};
         _uiHidden = false;
         _unhide = null;
         _root = _api = null;
-        _viewBtns = _sightBar = _fovNote = _adsPanel = _rangePanel = _tacPanel = null;
+        _viewBtns = _sightBar = _fovNote = _adsPanel = _rangePanel = _tacPanel = _smokePanel = null;
     }
 
     async function onReady() {
@@ -693,6 +937,7 @@ window.EFTForge = window.EFTForge || {};
         _root.classList.remove("b3d-waiting");
         _send("setSlotsHidden", _s.slotsHidden);
         _send("setSkills", { ..._savedSkills(), strength: EFTForge.state.currentStrengthLevel ?? 10 });
+        _send("setMuzzleEffects", _s.muzzleShow);
         try {
             const [range, display, ads, devices] = await Promise.all([
                 _api.call("rangeState"), _api.call("displayState"), _api.call("adsState"), _api.call("tacticalState"),
@@ -701,6 +946,8 @@ window.EFTForge = window.EFTForge || {};
         } catch (err) {
             console.warn("[builder-3d] panel state:", err.message);
         }
+        // An older viewer has no smoke: we leave the panel out rather than fail the rest.
+        _s.smoke = await _api.call("smokeStats").catch(() => null);
         _renderAll();
     }
 
@@ -716,6 +963,7 @@ window.EFTForge = window.EFTForge || {};
                 document.body.classList.toggle("b3d-sight", data === "sight");
                 if (data !== "sight") setUiHidden(false);
                 if (data === "sight") _hoverDevice(null);
+                else _holdSmoke(false);
                 _renderAll();
                 break;
             case "sight":
@@ -727,6 +975,7 @@ window.EFTForge = window.EFTForge || {};
             case "range": _s.range = data; _renderRange(); break;
             case "display": _s.display = data; _renderRange(); break;
             case "tactical": _s.devices = data || []; _renderTactical(); break;
+            case "smoke": _s.smoke = data || null; _renderSmoke(); break;
             case "adsdiagnosticspanel": _s.diagOpen = !!data?.open; _renderAds(); break;
             case "adsdiagnosticsrect": _s.diagRect = data || null; break;
             case "slotshidden":
