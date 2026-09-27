@@ -2065,7 +2065,7 @@ const _TRANSLATIONS = {
         "b3d.fixedEye":           "固定视点",
         "b3d.simAdsTip":          "从腰射姿态开始，像游戏中一样模拟瞄准",
         "b3d.fixedEyeTip":        "将摄影机固定在开镜状态并停止呼吸晃动模拟",
-        "b3d.fovNote":            "塔科夫会在任何设置下缩放手臂和枪械来保持武器大小不变；只有世界会变宽或变窄。此处的靶场按默认FOV 50 绘制。",
+        "b3d.fovNote":            "塔科夫会在任何FOV设置下缩放手臂和枪械来保持武器大小不变；只有世界会变宽或变窄。此处的靶场按默认FOV 50 绘制。",
         "b3d.adsHip":             "腰射",
         "b3d.adsAiming":          "瞄准中",
         "b3d.adsHolding":         "瞄准中 · 屏息",
