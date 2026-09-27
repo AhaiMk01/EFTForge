@@ -1732,7 +1732,10 @@ function renderAttachmentRows(items) {
         _showHoverDeltas(entry);
     });
 
-    row.addEventListener("mouseleave", () => _clearHoverDeltas());
+    row.addEventListener("mouseleave", () => {
+        EFTForge.builder3d?.prefetch(null);
+        _clearHoverDeltas();
+    });
 
     // Swipe-left to remove (touch devices - auto-registered by MutationObserver in app.js)
     // Disabled on mobile: table rows scroll horizontally to show stats, swipe-to-remove

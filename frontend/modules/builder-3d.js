@@ -1105,8 +1105,10 @@ window.EFTForge = window.EFTForge || {};
         return node.item?.short_name || node.item?.name || null;
     }
 
+    // The viewer loads the model once the pointer has rested on the row a moment; null
+    // cancels that when the pointer moves on first.
     function prefetch(tpl) {
-        if (isActive() && _ready && tpl) send("prefetch", tpl);
+        if (isActive() && _ready) send("prefetch", tpl || null);
     }
 
     window.addEventListener("message", _onMessage);
