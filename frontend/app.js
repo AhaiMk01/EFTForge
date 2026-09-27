@@ -1322,6 +1322,9 @@ async function switchLang(lang) {
 
     // Snapshot build state before teardown - item names in cached objects are language-specific
     const previousGunId = EFTForge.state.currentGun?.id ?? null;
+    // returnToGunSelection() below deactivates the open tab, so remember it and
+    // reactivate it afterwards instead of reloading the build with no tab attached.
+    const previousTabId = EFTForge.state.activeTabId ?? null;
     let snapshotCode = null;
     let snapshotBuildName = null;
     if (EFTForge.state.currentGun) {
@@ -1367,7 +1370,15 @@ async function switchLang(lang) {
 
     // Restore previously open weapon with its build state in the new language
     try {
-        if (previousGunId) {
+        if (previousTabId && EFTForge.state.tabs.some(tab => tab.id === previousTabId)) {
+            // The tab record already holds the build, its name and its undo history,
+            // and switching to it reloads everything in the new language.
+            await EFTForge.tabs.switchToTab(previousTabId);
+            if (snapshotCode) {
+                const { t: _t } = EFTForge.lang;
+                showToast(_t("toast.stateRestored"), _t("toast.stateRestoredMsg"), 3000, "#4CAF50");
+            }
+        } else if (previousGunId) {
             const gun = EFTForge.state.allGuns.find(g => g.id === previousGunId);
             if (gun) {
                 if (snapshotCode) {
