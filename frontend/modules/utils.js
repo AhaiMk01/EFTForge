@@ -1,6 +1,6 @@
 window.EFTForge = window.EFTForge || {};
 
-/* exported proxyAvatarUrl, isMobileLayout, _formatPrice, setToastStatus -- called from other modules */
+/* exported proxyAvatarUrl, isMobileLayout, _formatPrice, setToastStatus, setupCustomScrollbar -- called from other modules */
 
 window.EFTForge.utils = {};
 
@@ -560,6 +560,304 @@ function setupEdgePanScroll(el, { zone = 25, maxSpeed = 2 } = {}) {
 
     el.addEventListener("mouseleave", () => setPanSpeed(0));
 }
+
+/* --- Custom scrollbar --- */
+
+const _CS_AXES = {
+    y: { pos: "scrollTop",  size: "scrollHeight", view: "clientHeight", client: "clientY", delta: "deltaY" },
+    x: { pos: "scrollLeft", size: "scrollWidth",  view: "clientWidth",  client: "clientX", delta: "deltaX" },
+};
+
+// Swap an element's native scrollbar for our own overlay one: a slim rail that fades
+// in while the pointer is over the element or it's scrolling, widens on hover, and
+// supports thumb dragging, click-to-jump on the track, and wheel over the rail. The
+// element stays the real scroller, so keyboard/wheel/touch scrolling and every scroll
+// listener already on it keep working untouched. We mount the rail as a sibling, not a
+// child, otherwise it would scroll away with the content. axis is "y", "x" or "both".
+// Returns { update, dispose }, or null on touch devices, where the OS already draws
+// transient overlay scrollbars and the native styling stays in place.
+function setupCustomScrollbar(el, { axis = "y", inset = 2, minThumb = 24 } = {}) {
+    if (!el || !el.parentNode) return null;
+    if (el._customScrollbar) return el._customScrollbar;
+    if (window.matchMedia?.("(pointer: coarse)").matches) return null;
+    _csInstallPressGuard();
+
+    const abort = new AbortController();
+    const { signal } = abort;
+    const bars = (axis === "both" ? ["y", "x"] : [axis]).map(a => {
+        const rail = document.createElement("div");
+        rail.className = `cs-rail cs-rail-${a}`;
+        rail.setAttribute("aria-hidden", "true");
+        rail.hidden = true;
+        const thumb = document.createElement("div");
+        thumb.className = "cs-thumb";
+        rail.appendChild(thumb);
+        return { a, k: _CS_AXES[a], rail, thumb, thick: 0, scale: 1, trackLen: 0, thumbLen: 0 };
+    });
+
+    el.classList.add("cs-host");
+    // Sit one layer above hosts that stack themselves (dropdown lists, popovers)
+    const hostZ = parseInt(getComputedStyle(el).zIndex, 10);
+    if (!isNaN(hostZ)) bars.forEach(b => { b.rail.style.zIndex = hostZ + 1; });
+
+    let rafId = null;
+    // Auto-attach happens on pointerover, after the host's own pointerenter has passed
+    let hoverEl = el.matches(":hover");
+    let hoverRail = false;
+    let scrolling = false;
+    let scrollIdleTimer = null;
+    let drag = null;
+
+    function schedule() {
+        if (rafId == null) rafId = requestAnimationFrame(update);
+    }
+
+    function syncVisible() {
+        const on = hoverEl || hoverRail || scrolling || !!drag;
+        bars.forEach(b => b.rail.classList.toggle("cs-visible", on));
+    }
+
+    // Show the rail for a moment, same as a scroll would
+    function flash() {
+        scrolling = true;
+        syncVisible();
+        clearTimeout(scrollIdleTimer);
+        scrollIdleTimer = setTimeout(() => { scrolling = false; syncVisible(); }, 800);
+    }
+
+    // Screen px per CSS px of n, so zoomed or scaled panels (the 3D stats dock) line up
+    function scaleOf(n) {
+        return n && n.offsetWidth ? n.getBoundingClientRect().width / n.offsetWidth : 1;
+    }
+
+    // el's padding box, in the rail's own CSS px and containing block coordinates
+    function hostFrame(rail) {
+        const host = rail.offsetParent;
+        if (!host) return null;
+        const er = el.getBoundingClientRect();
+        const sR = scaleOf(rail.parentElement);
+        let ox, oy;
+        if (host === document.body && getComputedStyle(host).position === "static") {
+            ox = -window.scrollX;
+            oy = -window.scrollY;
+        } else {
+            const hr = host.getBoundingClientRect();
+            const sH = scaleOf(host);
+            ox = hr.left + (host.clientLeft - host.scrollLeft) * sH;
+            oy = hr.top + (host.clientTop - host.scrollTop) * sH;
+        }
+        const k = scaleOf(el) / sR;
+        return {
+            scale: sR,
+            left: (er.left - ox) / sR + el.clientLeft * k,
+            top: (er.top - oy) / sR + el.clientTop * k,
+            width: el.clientWidth * k,
+            height: el.clientHeight * k,
+        };
+    }
+
+    function update() {
+        rafId = null;
+        // Popovers get removed outright; take the rail with them. It comes back if the
+        // host is reinserted and grows scrollable again.
+        if (!el.isConnected) {
+            bars.forEach(b => { b.rail.remove(); b.rail.hidden = true; });
+            return;
+        }
+        const shown = el.getClientRects().length > 0;
+        // Hosts can flip to overflow:hidden later (modal locks, layout modes)
+        const cs = shown ? getComputedStyle(el) : null;
+        let appeared = false;
+        for (const b of bars) {
+            const mode = cs && (b.a === "y" ? cs.overflowY : cs.overflowX);
+            const scrollable = (mode === "auto" || mode === "scroll") && el[b.k.size] - el[b.k.view] > 1;
+            if (scrollable && b.rail.parentNode !== el.parentNode) el.after(b.rail);
+            if (scrollable && b.rail.hidden) appeared = true;
+            b.rail.hidden = !scrollable;
+        }
+        // A list that just opened (or just outgrew its box) hints that it scrolls
+        if (appeared) flash();
+        const yBar = bars.find(b => b.a === "y" && !b.rail.hidden);
+        const xBar = bars.find(b => b.a === "x" && !b.rail.hidden);
+        for (const b of bars) {
+            if (b.rail.hidden) continue;
+            const o = hostFrame(b.rail);
+            if (!o) continue;
+            b.scale = o.scale;
+            if (!b.thick) b.thick = b.a === "y" ? b.rail.offsetWidth : b.rail.offsetHeight;
+            // Leave the corner free when both rails are up so they don't overlap
+            const other = b.a === "y" ? xBar : yBar;
+            const cut = other ? other.thick || 0 : 0;
+            const s = b.rail.style;
+            if (b.a === "y") {
+                b.trackLen = Math.max(0, o.height - inset * 2 - cut);
+                s.top = (o.top + inset) + "px";
+                s.left = (o.left + o.width - b.thick) + "px";
+                s.height = b.trackLen + "px";
+            } else {
+                b.trackLen = Math.max(0, o.width - inset * 2 - cut);
+                s.left = (o.left + inset) + "px";
+                s.top = (o.top + o.height - b.thick) + "px";
+                s.width = b.trackLen + "px";
+            }
+            const size = el[b.k.size];
+            const view = el[b.k.view];
+            const max = size - view;
+            b.thumbLen = Math.min(b.trackLen, Math.max(minThumb, b.trackLen * view / size));
+            const offset = max > 0 ? (b.trackLen - b.thumbLen) * (el[b.k.pos] / max) : 0;
+            const ts = b.thumb.style;
+            if (b.a === "y") {
+                ts.height = b.thumbLen + "px";
+                ts.transform = `translateY(${offset}px)`;
+            } else {
+                ts.width = b.thumbLen + "px";
+                ts.transform = `translateX(${offset}px)`;
+            }
+        }
+    }
+
+    // px of scroll per px of thumb travel
+    function scrollRatio(b) {
+        const free = b.trackLen - b.thumbLen;
+        return free > 0 ? (el[b.k.size] - el[b.k.view]) / free : 0;
+    }
+
+    function startDrag(b, e, captureEl) {
+        drag = { b, id: e.pointerId, from: e[b.k.client], start: el[b.k.pos], prevBehavior: el.style.scrollBehavior };
+        // Smooth scroll-behavior would make the content trail the thumb
+        el.style.scrollBehavior = "auto";
+        captureEl.setPointerCapture(e.pointerId);
+        b.rail.classList.add("cs-dragging");
+        document.documentElement.classList.add("cs-drag-active");
+        syncVisible();
+    }
+
+    function endDrag() {
+        if (!drag) return;
+        el.style.scrollBehavior = drag.prevBehavior;
+        drag.b.rail.classList.remove("cs-dragging");
+        drag = null;
+        document.documentElement.classList.remove("cs-drag-active");
+        syncVisible();
+    }
+
+    for (const b of bars) {
+        // Called by the press guard (_csInstallPressGuard), which owns the rail's pointerdown
+        b.rail._csPress = (e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            if (e.target !== b.thumb) {
+                // Jump the thumb's center to the click, then keep dragging from there
+                const r = b.rail.getBoundingClientRect();
+                const at = (e[b.k.client] - (b.a === "y" ? r.top : r.left)) / b.scale - b.thumbLen / 2;
+                el[b.k.pos] = at * scrollRatio(b);
+                schedule();
+            }
+            startDrag(b, e, b.rail);
+        };
+
+        b.rail.addEventListener("pointermove", (e) => {
+            if (!drag || drag.b !== b || e.pointerId !== drag.id) return;
+            el[b.k.pos] = drag.start + (e[b.k.client] - drag.from) / b.scale * scrollRatio(b);
+        }, { signal });
+
+        b.rail.addEventListener("pointerup", endDrag, { signal });
+        b.rail.addEventListener("pointercancel", endDrag, { signal });
+        b.rail.addEventListener("lostpointercapture", endDrag, { signal });
+
+        // The rail isn't inside el, so the wheel wouldn't reach it on its own
+        b.rail.addEventListener("wheel", (e) => {
+            e.preventDefault();
+            const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? el[b.k.view] : 1;
+            el.scrollBy({ left: e.deltaX * unit, top: e.deltaY * unit });
+        }, { signal, passive: false });
+
+        b.rail.addEventListener("pointerenter", () => { hoverRail = true; syncVisible(); }, { signal });
+        b.rail.addEventListener("pointerleave", () => { hoverRail = false; syncVisible(); }, { signal });
+    }
+
+    el.addEventListener("pointerenter", () => { hoverEl = true; syncVisible(); schedule(); }, { signal });
+    el.addEventListener("pointerleave", () => { hoverEl = false; syncVisible(); }, { signal });
+    el.addEventListener("scroll", () => { flash(); schedule(); }, { signal, passive: true });
+
+    // el's own box changes resize the track; its children changing size (rows added,
+    // images loading, sections collapsing) is what moves scrollHeight
+    const ro = new ResizeObserver(schedule);
+    function observeChildren() {
+        ro.disconnect();
+        ro.observe(el);
+        for (const child of el.children) ro.observe(child);
+    }
+    const mo = new MutationObserver(() => { observeChildren(); schedule(); });
+    mo.observe(el, { childList: true });
+    observeChildren();
+    schedule();
+
+    function dispose() {
+        abort.abort();
+        ro.disconnect();
+        mo.disconnect();
+        clearTimeout(scrollIdleTimer);
+        if (rafId != null) cancelAnimationFrame(rafId);
+        endDrag();
+        bars.forEach(b => b.rail.remove());
+        el.classList.remove("cs-host");
+        delete el._customScrollbar;
+    }
+
+    el._customScrollbar = { update: schedule, dispose };
+    return el._customScrollbar;
+}
+
+// A rail press is never a press on the page. Rails sit beside their host rather than
+// inside it, so click-outside handlers (custom selects, the advanced stats popover,
+// several of which listen in the capture phase) would take it as an outside click and
+// close. We catch rail presses on window in the capture phase, before any page listener
+// sees them, run the rail's own handler and stop them there. preventDefault on mousedown
+// also keeps focus where it is (the leaderboard gun picker closes when its input blurs).
+let _csGuardInstalled = false;
+function _csInstallPressGuard() {
+    if (_csGuardInstalled) return;
+    _csGuardInstalled = true;
+    const guard = (e) => {
+        const rail = e.target instanceof Element ? e.target.closest(".cs-rail") : null;
+        if (!rail) return;
+        e.stopPropagation();
+        if (e.type === "pointerdown") rail._csPress?.(e);
+        else if (e.type !== "click") e.preventDefault();
+    };
+    for (const type of ["pointerdown", "mousedown", "click", "dblclick", "contextmenu"]) {
+        window.addEventListener(type, guard, true);
+    }
+}
+
+// Scrollers that hide their bar on purpose (tab strip, mobile header/combo strips).
+// Add data-native-scrollbar to opt anything else out.
+const _CS_OPT_OUT = "#tab-bar-scroll, .header-scroll, .combo-icon-scroll, [data-native-scrollbar]";
+
+function _csAutoAttach(el) {
+    if (!(el instanceof Element) || el._customScrollbar || el._csSkip) return;
+    if (el === document.documentElement || el === document.body) return;
+    if (el.matches(_CS_OPT_OUT)) { el._csSkip = true; return; }
+    const cs = getComputedStyle(el);
+    const scrolls = v => v === "auto" || v === "scroll";
+    const y = scrolls(cs.overflowY);
+    const x = scrolls(cs.overflowX);
+    if (!x && !y) return;
+    setupCustomScrollbar(el, { axis: x && y ? "both" : y ? "y" : "x" });
+}
+
+// Hand every scroll container in the page our scrollbar, whether it's in the static
+// markup or built later by a modal, table or panel. We attach lazily on first hover
+// (walking up from the pointer, which covers nested scrollers) or first scroll, so
+// nothing has to register itself and big re-renders don't pay for a DOM scan.
+(function initAutoScrollbars() {
+    if (window.matchMedia?.("(pointer: coarse)").matches) return;
+    document.addEventListener("pointerover", (e) => {
+        for (let n = e.target; n && n !== document.body; n = n.parentElement) _csAutoAttach(n);
+    }, { passive: true });
+    document.addEventListener("scroll", (e) => _csAutoAttach(e.target), { capture: true, passive: true });
+})();
 
 /* --- Marquee / sleep --- */
 

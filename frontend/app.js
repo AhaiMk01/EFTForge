@@ -1222,6 +1222,7 @@ function setupCustomSelect(selectId) {
     sel.addEventListener("input", syncTrigger);
 
     rebuild();
+    setupCustomScrollbar(list, { inset: 4 });
     return wrapper;
 }
 

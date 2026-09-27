@@ -1159,6 +1159,95 @@ header:not(.header-expanded) .header-nav-btn-icon {
   background: #555;
 }
 
+/* =========================
+   CUSTOM SCROLLBAR (utils.js setupCustomScrollbar)
+========================= */
+
+/* Every scroller in the page draws our overlay rail instead of the native bar (utils.js
+   attaches it on first hover or scroll), so hide native bars up front: hiding them only
+   on attach would shift the layout under the cursor. !important beats the per-element
+   scrollbar-width rules, and in Chromium a non-auto scrollbar-width also switches off
+   the ::-webkit-scrollbar rules. Touch devices keep their native overlay bars. */
+@media not all and (pointer: coarse) {
+  body * {
+    scrollbar-width: none !important;
+  }
+
+  body *::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* These used to reserve a stable 10px gutter for the native bar; the padding takes
+     it over now so the layout (and #stats' matching padding) stays put. */
+  #slots,
+  #weapon-selector,
+  #price-overview {
+    padding-right: 20px;
+  }
+}
+
+.cs-rail {
+  position: absolute;
+  z-index: 2;
+  border-radius: 999px;
+  opacity: 0;
+  transition: opacity 0.25s ease, background-color 0.15s ease;
+  user-select: none;
+  touch-action: none;
+}
+
+.cs-rail[hidden] {
+  display: none;
+}
+
+.cs-rail-y { width: 10px; }
+.cs-rail-x { height: 10px; }
+
+.cs-rail.cs-visible,
+.cs-rail:hover,
+.cs-rail.cs-dragging {
+  opacity: 1;
+}
+
+.cs-rail:hover,
+.cs-rail.cs-dragging {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.cs-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: #444;
+  border-radius: 999px;
+  cursor: default;
+  transition: background-color 0.15s ease, left 0.15s ease, right 0.15s ease, top 0.15s ease, bottom 0.15s ease;
+}
+
+/* Slim at rest, fattening up when the pointer comes for it */
+.cs-rail-y .cs-thumb { left: 3px; right: 3px; }
+.cs-rail-x .cs-thumb { top: 3px; bottom: 3px; }
+
+.cs-rail-y:hover .cs-thumb,
+.cs-rail-y.cs-dragging .cs-thumb { left: 2px; right: 2px; }
+
+.cs-rail-x:hover .cs-thumb,
+.cs-rail-x.cs-dragging .cs-thumb { top: 2px; bottom: 2px; }
+
+.cs-rail:hover .cs-thumb {
+  background: #666;
+}
+
+.cs-rail.cs-dragging .cs-thumb {
+  background: #f5c542;
+}
+
+/* Keep a thumb drag from selecting text or tripping hover states under the cursor */
+html.cs-drag-active,
+html.cs-drag-active * {
+  user-select: none !important;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
 }

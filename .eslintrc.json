@@ -135,6 +135,7 @@
     "returnToGunSelection": "readonly",
     "selectGun": "readonly",
     "setToastStatus": "readonly",
+    "setupCustomScrollbar": "readonly",
     "setupCustomSelect": "readonly",
     "setupEdgePanScroll": "readonly",
     "showDiscardChangesModal": "readonly",
