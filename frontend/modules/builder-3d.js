@@ -409,10 +409,23 @@ window.EFTForge = window.EFTForge || {};
     // The viewer aims with our totals (setBuild clears them, so send after every build).
     function onStats() {
         if (!isActive() || !_ready) return;
+        send("setAmmo", _ammoLoad());
         const ergo = EFTForge.state.lastTotalErgo, weight = EFTForge.state.lastTotalWeight;
         if (!Number.isFinite(ergo) || !Number.isFinite(weight)) return;
         send("setWeaponStats", { ergonomics: ergo, weight });
         onAimSettings();
+    }
+
+    // The rounds the viewer loads, as the build image does: with "Assume Full Magazine"
+    // on, magazines full of the selected ammo with a round chambered, and a UBGL its
+    // grenade (only while its row shows; the select keeps its last value when hidden).
+    // The viewer ignores a repeat of what it already holds, and keeps it across builds.
+    function _ammoLoad() {
+        if (!(EFTForge.state.assumeFullMag ?? true)) return null;
+        const ubglRow = document.getElementById("ubgl-ammo-row");
+        const ubgl = ubglRow && ubglRow.style.display !== "none"
+            ? document.getElementById("ubgl-ammo-select")?.value : null;
+        return { ammo: document.getElementById("ammo-select")?.value || null, ubgl: ubgl || null };
     }
 
     // Our Strength level and equipment ergo modifier drive the viewer's ADS model too, so its
