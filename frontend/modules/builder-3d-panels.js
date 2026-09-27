@@ -196,6 +196,8 @@ window.EFTForge = window.EFTForge || {};
                 const next = {};
                 for (const i of skills.querySelectorAll("input")) next[i.dataset.key] = Number(i.value);
                 _send("setSkills", next);
+                // Strength is also our stats panel's Strength level: keep the two as one.
+                if (key === "strength") EFTForge.statsPanel?.setStrengthLevel(next.strength);
             });
             skills.append(el("span.b3d-skill-name", { dataset: { key, label, tipKey: tip } }), input, el("span.b3d-skill-level", { dataset: { key } }));
         }

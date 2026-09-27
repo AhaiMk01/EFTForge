@@ -120,6 +120,7 @@ window.EFTForge = window.EFTForge || {};
         send("setLanguage", EFTForge.state.lang === "zh" ? "zh" : "en");
         send("setHudStyle", _hudStyle());
         _sendBackdrop();
+        onAimSettings();
         EFTForge.builder3dPanels?.onReady();
         _syncedKey = null;
         _scheduleSync();
@@ -378,6 +379,15 @@ window.EFTForge = window.EFTForge || {};
         const ergo = EFTForge.state.lastTotalErgo, weight = EFTForge.state.lastTotalWeight;
         if (!Number.isFinite(ergo) || !Number.isFinite(weight)) return;
         send("setWeaponStats", { ergonomics: ergo, weight });
+        onAimSettings();
+    }
+
+    // Our Strength level and equipment ergo modifier drive the viewer's ADS model too, so its
+    // arm stamina and overswing match the stats panel.
+    function onAimSettings() {
+        if (!_frame || !_ready) return;
+        send("setSkills", { strength: EFTForge.state.currentStrengthLevel ?? 10 });
+        send("setEquipmentErgonomics", EFTForge.state.currentEquipErgoModifier ?? 0);
     }
 
     // A notice when parts have no 3D model (they stay installed, just not drawn).
@@ -1082,7 +1092,7 @@ window.EFTForge = window.EFTForge || {};
     }
 
     EFTForge.builder3d = {
-        isActive, setMode, setPickerStyle, onGunOpen, onBuildLeave, onStats, onTraderLevelsChange, prefetch, closePicker,
+        isActive, setMode, setPickerStyle, onGunOpen, onBuildLeave, onStats, onAimSettings, onTraderLevelsChange, prefetch, closePicker,
         leaveSight,
         flashConflict, flashSlot, partName, holdLoading,
         call, send,

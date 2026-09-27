@@ -1194,6 +1194,7 @@ function wireStrengthControls() {
     slider.addEventListener("input", () => {
         EFTForge.state.currentStrengthLevel = parseInt(slider.value);
         numInput.value = EFTForge.state.currentStrengthLevel;
+        EFTForge.builder3d?.onAimSettings();
 
         // Recalculate arm stamina inline without triggering a DOM rebuild
         const armStamina = calcArmStamina(EFTForge.state.lastTotalWeight, EFTForge.state.lastTotalErgo, EFTForge.state.currentStrengthLevel, EFTForge.state.currentEquipErgoModifier);
@@ -1230,12 +1231,29 @@ function wireStrengthControls() {
         EFTForge.state.currentStrengthLevel = val;
         numInput.value = val;
         slider.value = val;
+        EFTForge.builder3d?.onAimSettings();
 
         const armStamina = calcArmStamina(EFTForge.state.lastTotalWeight, EFTForge.state.lastTotalErgo, EFTForge.state.currentStrengthLevel, EFTForge.state.currentEquipErgoModifier);
 
         const staminaSpan = document.querySelector("#stamina-info-btn")?.closest(".stat-row")?.lastElementChild;
         if (staminaSpan) staminaSpan.textContent = fmtArmStamina(armStamina);
     });
+}
+
+// Strength set from outside our controls (the 3D view's ADS skills): save it and update the
+// slider, number box and arm stamina in place, as dragging our own slider does.
+function _setStrengthLevel(level) {
+    const val = Math.max(0, Math.min(51, Math.round(Number(level) || 0)));
+    if (val === EFTForge.state.currentStrengthLevel) return;
+    EFTForge.state.currentStrengthLevel = val;
+    localStorage.setItem("eftforge_strength_level", val);
+    const slider = document.getElementById("strength-slider");
+    const numInput = document.getElementById("strength-input");
+    if (slider) slider.value = val;
+    if (numInput) numInput.value = val;
+    const armStamina = calcArmStamina(EFTForge.state.lastTotalWeight, EFTForge.state.lastTotalErgo, val, EFTForge.state.currentEquipErgoModifier);
+    const staminaSpan = document.querySelector("#stamina-info-btn")?.closest(".stat-row")?.lastElementChild;
+    if (staminaSpan) staminaSpan.textContent = fmtArmStamina(armStamina);
 }
 
 // Warn below this much TED with no equipment modifier set: typical gear takes 10 to 30%
@@ -1266,6 +1284,7 @@ function wireEquipErgoControls() {
     if (!slider || !numInput) return;
 
     function updateEquipErgoDisplay() {
+        EFTForge.builder3d?.onAimSettings();
         const trueErgo = calcTrueErgoDelta(EFTForge.state.lastTotalErgo, EFTForge.state.lastTotalWeight, EFTForge.state.currentEquipErgoModifier);
         const aimSway = calcAimSway(EFTForge.state.lastTotalErgo, EFTForge.state.lastTotalWeight, EFTForge.state.currentEquipErgoModifier);
         const overswing = aimSway > 0;
@@ -1390,4 +1409,4 @@ function _followHiddenStatsBtn() {
 
 window.addEventListener("resize", _followHiddenStatsBtn);
 
-EFTForge.statsPanel = { followHiddenStatsBtn: _followHiddenStatsBtn };
+EFTForge.statsPanel = { followHiddenStatsBtn: _followHiddenStatsBtn, setStrengthLevel: _setStrengthLevel };
