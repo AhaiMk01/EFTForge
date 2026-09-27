@@ -10420,3 +10420,4 @@ body.b3d-picker-open .b3d-viewbtns {
 .b3d-power.active { color: #00c8b4; }
 .b3d-tac-mode { font-size: 11px; color: #777; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .b3d-tac-device.powered .b3d-tac-mode { color: #bbb; }
+.b3d-tac-note { padding: 6px 10px; border-top: 1px solid #1f1f1f; font-size: 11px; line-height: 1.35; color: #f5c542; }

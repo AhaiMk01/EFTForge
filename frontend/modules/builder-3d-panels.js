@@ -509,6 +509,9 @@ window.EFTForge = window.EFTForge || {};
             list.append(row);
         });
         _tacPanel.append(list);
+        // The viewer drops shadows and cookies past the GPU's texture limit; say so
+        // rather than leave the dimmer beams unexplained.
+        if (devices.some(d => d.on && d.limited)) _tacPanel.append(el("div.b3d-tac-note", { text: _t("b3d.lightsLimited") }));
     }
 
     // --------------------------------------------------------- dragged panels

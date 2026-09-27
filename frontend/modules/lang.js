@@ -1064,6 +1064,7 @@ const _TRANSLATIONS = {
         "b3d.em.irLight":         "IR illuminator",
         "b3d.em.rangefinder":     "Rangefinder",
         "b3d.irTip":              " (infrared: visible only through a night vision scope)",
+        "b3d.lightsLimited":      "Lighting effects exceed the GPU's available limits: some shadows or beam patterns are off.",
     },
     zh: {
         // Header
@@ -2127,6 +2128,7 @@ const _TRANSLATIONS = {
         "b3d.em.irLight":         "红外照明",
         "b3d.em.rangefinder":     "测距仪",
         "b3d.irTip":              "（红外：仅可通过夜视瞄具看到）",
+        "b3d.lightsLimited":      "开启的灯光效果超出显卡可支配上限，部分阴影或光斑已关闭。",
     },
 };
 
