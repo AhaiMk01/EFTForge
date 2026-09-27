@@ -10270,6 +10270,37 @@ body.builder-3d .hidden-stats-popover,
   transition: opacity 0.2s ease, visibility 0.2s;
 }
 
+/* Hidden UI (Hide UI in the sight picture): only the site's nav bar, the build tabs, the
+   footer and the viewer's own watermark stay. Hidden rather than removed, so nothing reflows or resizes
+   the view underneath. */
+body.builder-3d.b3d-ui-hidden #b3d-hud > :not(.b3d-unhide),
+body.builder-3d.b3d-ui-hidden #b3d-topleft,
+body.builder-3d.b3d-ui-hidden #b3d-stats-dock,
+body.builder-3d.b3d-ui-hidden .optimizer-edge-tab,
+body.builder-3d.b3d-ui-hidden .hidden-stats-popover {
+  visibility: hidden !important;
+}
+
+/* The show button's corner: it catches the pointer only while the UI is hidden. */
+.b3d-unhide {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 280px;
+  height: 120px;
+  display: none;
+  pointer-events: auto;
+}
+body.builder-3d.b3d-ui-hidden .b3d-unhide { display: block; }
+.b3d-unhide-btn {
+  position: absolute;
+  right: calc(var(--b3d-edge) + 16px);
+  bottom: 16px;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.b3d-unhide.shown .b3d-unhide-btn { opacity: 1; transition-duration: 0.15s; }
+
 /* The attachment table covers their corner while it is open: fade them out rather than
    push them aside, and give them back once it closes. */
 body.b3d-picker-open .b3d-viewbtns {

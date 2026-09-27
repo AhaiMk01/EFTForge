@@ -614,7 +614,10 @@ window.EFTForge = window.EFTForge || {};
                     _native = null;
                 }
                 break;
-            case "escape": closePicker(); break;
+            case "escape":
+                if (EFTForge.builder3dPanels?.uiHidden) EFTForge.builder3dPanels.setUiHidden(false);
+                else closePicker();
+                break;
             case "partclick": if (_tableOpen()) closePicker(); break;
             case "mode": if (data === "sight") closePicker(); break;
             default: break;
@@ -709,6 +712,8 @@ window.EFTForge = window.EFTForge || {};
     document.addEventListener("keydown", (e) => {
         if (_keyBlocked(e)) return;
         if (e.key === "Escape") {
+            // With our UI hidden over the sight picture, Esc brings it back instead.
+            if (EFTForge.builder3dPanels?.uiHidden) { EFTForge.builder3dPanels.setUiHidden(false); return; }
             if (_tableOpen() || _native) { closePicker(); return; }
             _forward("down", e);
             return;

@@ -90,6 +90,7 @@ window.EFTForge = window.EFTForge || {};
     let _viewBtns = null;
     function _buildViewButtons() {
         _viewBtns = el("div.b3d-viewbtns", {}, [
+            el("button.b3d-btn", { dataset: { act: "hideui" }, onclick: () => setUiHidden(true) }),
             el("button.b3d-btn", { dataset: { act: "slots" }, onclick: () => _send("setSlotsHidden", !_s.slotsHidden) }),
             el("button.b3d-btn", { dataset: { act: "sight" }, onclick: () => _send(_s.mode === "sight" ? "exitSight" : "enterSight") }),
             el("button.b3d-btn", { dataset: { act: "reset" }, onclick: () => _send("reset") }),
@@ -103,6 +104,9 @@ window.EFTForge = window.EFTForge || {};
         const slots = _viewBtns.querySelector('[data-act="slots"]');
         slots.textContent = `${_t(_s.slotsHidden ? "b3d.showSlots" : "b3d.hideSlots")} (H)`;
         slots.hidden = sight;
+        const hideUi = _viewBtns.querySelector('[data-act="hideui"]');
+        hideUi.textContent = _t("b3d.hideUi");
+        hideUi.hidden = !sight;
         const sightBtn = _viewBtns.querySelector('[data-act="sight"]');
         sightBtn.textContent = sight ? `${_t("b3d.exitSight")} (Esc)` : `${_t("b3d.sight")} (V)`;
         sightBtn.hidden = !sight && !_s.hasSights;
@@ -600,6 +604,46 @@ window.EFTForge = window.EFTForge || {};
     document.addEventListener("pointerup", _endDrag);
     document.addEventListener("pointercancel", _endDrag);
 
+    // --------------------------------------------------------- hidden UI
+
+    // The sight picture with nothing of ours over it but the site's nav bar and footer, for
+    // recording. A show button waits in the bottom right corner, fading out once the
+    // pointer leaves that corner; Esc brings everything back too, rather than leaving the
+    // sight picture (the viewer holds Esc for us meanwhile, setEscapeHeld).
+    const UNHIDE_FADE_MS = 1800;
+    let _uiHidden = false, _unhide = null, _unhideTimer = 0;
+
+    function _buildUnhide() {
+        const btn = el("button.b3d-btn.b3d-unhide-btn", { type: "button", onclick: () => setUiHidden(false) });
+        _unhide = el("div.b3d-unhide", {}, [btn]);
+        _unhide.addEventListener("pointerenter", () => _showUnhide(false));
+        _unhide.addEventListener("pointermove", () => _showUnhide(false));
+        _unhide.addEventListener("pointerleave", () => _showUnhide(true));
+        _root.append(_unhide);
+    }
+
+    // Show the button now; fade: fade it out again after a while.
+    function _showUnhide(fade) {
+        if (!_unhide) return;
+        clearTimeout(_unhideTimer);
+        _unhide.classList.add("shown");
+        if (fade) _unhideTimer = setTimeout(() => _unhide?.classList.remove("shown"), UNHIDE_FADE_MS);
+    }
+
+    function setUiHidden(on) {
+        on = !!on && _s.mode === "sight";
+        if (on === _uiHidden) return;
+        _uiHidden = on;
+        document.body.classList.toggle("b3d-ui-hidden", on);
+        _send("setEscapeHeld", on);
+        if (on && _s.diagOpen) _send("setAdsDiagnosticsPanel", false);
+        if (_unhide) {
+            _unhide.querySelector("button").textContent = `${_t("b3d.showUi")} (Esc)`;
+            if (on) _showUnhide(true);
+            else { clearTimeout(_unhideTimer); _unhide.classList.remove("shown"); }
+        }
+    }
+
     // --------------------------------------------------------- lifecycle
 
     function _renderAll() {
@@ -626,6 +670,7 @@ window.EFTForge = window.EFTForge || {};
         _buildSightBar();
         _buildAdsPanel();
         _buildRangePanel();
+        _buildUnhide();
         _tacPanel = null;
         _resizeObs = new ResizeObserver(_placeAll);
         _resizeObs.observe(_root);
@@ -635,7 +680,10 @@ window.EFTForge = window.EFTForge || {};
     function unmount() {
         _resizeObs?.disconnect();
         _resizeObs = null;
-        document.body.classList.remove("b3d-sight");
+        document.body.classList.remove("b3d-sight", "b3d-ui-hidden");
+        clearTimeout(_unhideTimer);
+        _uiHidden = false;
+        _unhide = null;
         _root = _api = null;
         _viewBtns = _sightBar = _fovNote = _adsPanel = _rangePanel = _tacPanel = null;
     }
@@ -666,6 +714,7 @@ window.EFTForge = window.EFTForge || {};
             case "mode":
                 _s.mode = data;
                 document.body.classList.toggle("b3d-sight", data === "sight");
+                if (data !== "sight") setUiHidden(false);
                 if (data === "sight") _hoverDevice(null);
                 _renderAll();
                 break;
@@ -689,6 +738,7 @@ window.EFTForge = window.EFTForge || {};
         }
     }
 
-    EFTForge.builder3dPanels = { mount, unmount, onReady, onEvent, render: _renderAll,
+    EFTForge.builder3dPanels = { mount, unmount, onReady, onEvent, render: _renderAll, setUiHidden,
+        get uiHidden() { return _uiHidden; },
         diagnosticsRect: () => (_s.diagOpen ? _s.diagRect : null) };
 })();
