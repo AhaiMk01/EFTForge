@@ -10367,6 +10367,24 @@ body.b3d-picker-open .b3d-viewbtns {
 .b3d-range-dist { font-weight: 700; font-size: 14px; color: #eee; font-variant-numeric: tabular-nums; }
 .b3d-range-slider { width: 100%; }
 .b3d-targets .b3d-chip { flex: 1; }
+
+/* Key colour row: the backdrop chip, flat swatches, then a custom picker. */
+.b3d-keyrow { align-items: stretch; }
+.b3d-keyrow[hidden] { display: none; }
+.b3d-key-swatch { width: 22px; padding: 0; }
+.b3d-key-swatch:hover { border-color: #888; }
+.b3d-key-swatch.active { border-color: #f5c542; }
+.b3d-key-custom {
+  width: 26px;
+  height: auto;
+  min-height: 20px;
+  padding: 0;
+  border: 1px solid #333;
+  border-radius: 4px;
+  background: #1a1a1a;
+  cursor: pointer;
+}
+.b3d-key-custom.active { border-color: #f5c542; }
 .b3d-display-head { border-top: 1px solid #2a2a2a; padding-top: 6px; }
 .b3d-monitor { font-size: 11px; color: #777; font-variant-numeric: tabular-nums; }
 

@@ -8,7 +8,8 @@ window.EFTForge = window.EFTForge || {};
 //   - view buttons: hide slots, sight picture, reset view
 //   - sight bar: sight switching, scope modes, zoom, ADS simulation switch
 //   - ADS panel: aim state, arm stamina, breath, skills
-//   - range panel: target distance, paper target, aspect ratio
+//   - range panel: target distance, paper target, range world on or off (and the key
+//     colour behind the weapon while it is off), aspect ratio
 //   - tactical devices: power and mode per light or laser
 // ============================================================
 
@@ -21,6 +22,15 @@ window.EFTForge = window.EFTForge || {};
     const SKILLS_KEY = "eftforge_b3d_skills";             // {weapon, aimDrills, endurance}; Strength is the stats panel's
     const PANEL_MARGIN = 8; // a dragged panel keeps this far inside the view
     const RANGE_PRESETS = [10, 25, 50, 100, 300, 500, 1000];
+    // Flat backgrounds for chroma keying while the range world is hidden.
+    const KEY_PRESETS = [
+        { hex: "#00b140", label: "b3d.key.chromaGreen" },
+        { hex: "#0047bb", label: "b3d.key.chromaBlue" },
+        { hex: "#00ff00", label: "b3d.key.pureGreen" },
+        { hex: "#ff00ff", label: "b3d.key.magenta" },
+        { hex: "#000000", label: "b3d.key.black" },
+        { hex: "#ffffff", label: "b3d.key.white" },
+    ];
     const SKILLS = [
         ["weapon", "b3d.skillWeapon", "b3d.skillWeaponTip"],
         ["aimDrills", "b3d.skillAimDrills", "b3d.skillAimDrillsTip"],
@@ -325,11 +335,27 @@ window.EFTForge = window.EFTForge || {};
             slider,
             el("div.b3d-chip-row.b3d-presets"),
             el("div.b3d-chip-row.b3d-targets"),
+            // Hiding the world leaves the weapon over our own backdrop instead of the range.
+            el("div.b3d-chip-row", {}, [el("button.b3d-chip.b3d-hide-world", {
+                dataset: { label: "b3d.hideWorld" }, onclick: () => _send("setRange", { world: _s.range?.world === false }) })]),
+            _buildKeyRow(),
             el("div.b3d-panel-head.b3d-display-head", {}, [el("span.b3d-mini-title", { dataset: { label: "b3d.display" } }), el("span.b3d-monitor")]),
             el("div.b3d-chip-row.b3d-ratios"),
         ]);
         _makeDraggable(RANGE_DRAG);
         _root.append(_rangePanel);
+    }
+
+    function _buildKeyRow() {
+        const custom = el("input.b3d-key-custom", { type: "color", value: "#00b140" });
+        custom.addEventListener("input", () => _send("setRange", { keyColor: custom.value }));
+        return el("div.b3d-chip-row.b3d-keyrow", {}, [
+            el("button.b3d-chip.b3d-key-backdrop", { dataset: { label: "b3d.key.backdrop" },
+                onclick: () => _send("setRange", { keyColor: null }) }),
+            ...KEY_PRESETS.map(p => el("button.b3d-chip.b3d-key-swatch", { style: `background-color: ${p.hex}`,
+                dataset: { key: p.hex, tipKey: p.label }, onclick: () => _send("setRange", { keyColor: p.hex }) })),
+            custom,
+        ]);
     }
 
     function _renderRange() {
@@ -362,6 +388,19 @@ window.EFTForge = window.EFTForge || {};
             for (const b of presets.children) b.classList.toggle("active", Number(b.dataset.distance) === Math.round(st.distance));
             for (const b of targets.querySelectorAll("[data-target]")) b.classList.toggle("active", st.visible && b.dataset.target === st.target);
             targets.querySelector(".b3d-hide-target").classList.toggle("active", !st.visible);
+            _rangePanel.querySelector(".b3d-hide-world").classList.toggle("active", st.world === false);
+            const keyRow = _rangePanel.querySelector(".b3d-keyrow");
+            keyRow.hidden = st.world !== false;
+            const key = st.keyColor || null;
+            keyRow.querySelector(".b3d-key-backdrop").classList.toggle("active", !key);
+            for (const b of keyRow.querySelectorAll(".b3d-key-swatch")) {
+                b.classList.toggle("active", b.dataset.key === key);
+                b.dataset.tooltip = _t(b.dataset.tipKey);
+            }
+            const custom = keyRow.querySelector(".b3d-key-custom");
+            custom.classList.toggle("active", !!key && !KEY_PRESETS.some(p => p.hex === key));
+            custom.title = _t("b3d.key.custom");
+            if (key && document.activeElement !== custom) custom.value = key;
         }
         const d = _s.display;
         if (d) {
