@@ -1238,7 +1238,7 @@ window.EFTForge = window.EFTForge || {};
         const holes = [];
         let veil = 0.35, anchor = null, sides = [], body = "";
         if (step === "camera") {
-            body = `<p class="b3d-intro-card-text">${EFTForge.lang.tFmt("b3d.introCameraBody", { gun: esc(gun?.short_name || gun?.name) })}</p>` +
+            body = `<p class="b3d-intro-card-text">${EFTForge.lang.tFmt("b3d.introCameraBody", { gun: esc(gun?.name || gun?.short_name) })}</p>` +
                 _introKeysHtml([
                     ["b3d.introKeyDrag", "b3d.introRotate"],
                     ["b3d.introKeyPan", "b3d.introPan"],
@@ -1256,7 +1256,7 @@ window.EFTForge = window.EFTForge || {};
                 anchor = { left: r.left - 4, top: r.top - 4, right: r.right + 4, bottom: r.bottom + 4, radius: 0 };
                 holes.push(anchor);
                 sides = ["below", "above", "right", "left"];
-                const part = partName(pick.slot.child.id);
+                const part = partName(pick.slot.child.id, { full: true });
                 if (part) text = EFTForge.lang.tFmt("b3d.introSlotsBody", { part: esc(part) });
             }
             const toggle = _introRect(_pickerToggle, 6, 6);
@@ -1281,7 +1281,7 @@ window.EFTForge = window.EFTForge || {};
                 const st = await call("sightState").catch(() => null);
                 if (!live()) return;
                 const cur = st?.sights?.[st.sightIndex];
-                const name = (cur && partName(cur.partId)) || st?.label;
+                const name = (cur && partName(cur.partId, { full: true })) || st?.label;
                 text = EFTForge.lang.tFmt("b3d.introSightBody", { sight: esc(name || _t("b3d.introSightFallback")) });
             }
             body = `<p class="b3d-intro-card-text">${text}</p>`;
@@ -1494,11 +1494,13 @@ window.EFTForge = window.EFTForge || {};
         if (hit.parentNode.children[hit.slot.id]) removeAttachment(hit.parentNode, hit.slot.id);
     }
 
-    // Our short name for a viewer part id (the panels show sights by name), or null.
-    function partName(partId) {
+    // Our short name for a viewer part id (the panels show sights by name), or null; the
+    // tour asks for the full one.
+    function partName(partId, { full = false } = {}) {
         const node = _nodeById.get(partId);
         if (!node || node === EFTForge.state.buildTree) return null;
-        return node.item?.short_name || node.item?.name || null;
+        const item = node.item;
+        return (full ? item?.name || item?.short_name : item?.short_name || item?.name) || null;
     }
 
     // The viewer loads the model once the pointer has rested on the row a moment; null
