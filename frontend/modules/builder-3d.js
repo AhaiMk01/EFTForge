@@ -1354,7 +1354,10 @@ window.EFTForge = window.EFTForge || {};
         const width2d = parseFloat(document.querySelector(".left-panel")?.style.width) || 660;
         _topLeft.style.width = Math.max(300, width2d - 40) + "px";
         document.body.classList.add("builder-3d");
-        document.body.classList.toggle("b3d-picker-open", _tableOpen());
+        // A table left open in 2D belongs to a slot the 3D view has no open box for: close it,
+        // as leaving 3D does.
+        if (_tableOpen()) document.getElementById("att-table-close-btn")?.click();
+        document.body.classList.remove("b3d-picker-open");
         _arrange(true);
         const container = _el("main-container");
         _stage = document.createElement("div");
