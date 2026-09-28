@@ -5896,6 +5896,29 @@ button.build-tag-chip.active {
 }
 .cb-info-icon:hover { border-color: #999; color: #bbb; }
 
+/* About modal: desktop installer download links (web only) */
+.about-desktop-dl {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: -8px;
+    user-select: none;
+}
+.about-desktop-dl-label {
+    font-size: 13px;
+    color: #888;
+    letter-spacing: 0.5px;
+}
+.about-desktop-dl-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #888;
+    text-decoration: none;
+    transition: color 0.15s;
+}
+.about-desktop-dl-link:hover { color: #f5c542; }
+
 .modal-divider {
     border: none;
     border-top: 1px solid #222;

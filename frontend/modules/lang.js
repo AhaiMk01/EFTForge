@@ -365,6 +365,9 @@ const _TRANSLATIONS = {
         "about.updateServerError":"Could not reach server.",
         "about.kitbashGameVersion": "For EFT Version: ",
         "about.kitbashLoading":   "Fetching Kitbash! status",
+        "about.desktopDownload":  "Get the Windows desktop app:",
+        "about.desktopGithub":    "Download from GitHub Releases",
+        "about.desktopGitee":     "Download from Gitee (mirror)",
         // Toast messages
         "toast.savedTitle":           "Build Saved",
         "toast.savedMsg":             "Your build has been saved.",
@@ -1525,6 +1528,9 @@ const _TRANSLATIONS = {
         "about.updateServerError":"无法连接服务器。",
         "about.kitbashGameVersion": "适配EFT版本：",
         "about.kitbashLoading":   "正在获取 Kitbash! 状态",
+        "about.desktopDownload":  "下载 Windows 桌面版：",
+        "about.desktopGithub":    "从 GitHub Releases 下载",
+        "about.desktopGitee":     "从 Gitee 镜像下载（国内推荐）",
         // Toast messages
         "toast.savedTitle":           "配置已保存",
         "toast.savedMsg":             "配置已成功保存。",
