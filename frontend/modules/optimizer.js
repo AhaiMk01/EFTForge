@@ -379,16 +379,6 @@ window.EFTForge.optimizer = (function () {
         const placeholder = document.getElementById('attachment-placeholder');
         if (placeholder && !isMobileLayout()) {
             _ensureEdgeTab(placeholder);
-            // The static tab in index.html ships with optimizer-edge-tab-pulse-snap
-            // hardcoded (so a first-ever visitor gets the pre-expanded intro state
-            // from their very first paint - see pulse()'s comment). _ensureEdgeTab
-            // no-ops when that element already exists, so a returning user (whose
-            // localStorage already says they've seen it) needs it stripped
-            // explicitly here instead, or it'd render stuck expanded forever with
-            // nothing left to ever remove it. This runs synchronously before the
-            // browser's first paint (this script isn't deferred/async), so there's
-            // no visible flash either way.
-            if (_hasPulsed) document.getElementById('optimizer-edge-tab')?.classList.remove('optimizer-edge-tab-pulse-snap');
             new MutationObserver(() => {
                 if (!EFTForge.state.publishMode) _ensureEdgeTab(placeholder);
             }).observe(placeholder, { childList: true });
@@ -424,52 +414,10 @@ window.EFTForge.optimizer = (function () {
         if (document.getElementById('optimizer-edge-tab')) return;
         const tab = document.createElement('div');
         tab.id = 'optimizer-edge-tab';
-        // Only pre-expanded (see pulse()'s comment) if this user has never seen the
-        // intro (tracked in localStorage, not just this session). Without this
-        // check, a placeholder rebuild later on (e.g. _restoreNormalPlaceholder
-        // after the publish-confirm flow) would recreate the tab already-expanded
-        // again, but pulse() would never fire again to collapse it - leaving it
-        // stuck expanded for good.
-        tab.className = _hasPulsed ? 'optimizer-edge-tab' : 'optimizer-edge-tab optimizer-edge-tab-pulse-snap';
+        tab.className = 'optimizer-edge-tab';
         tab.addEventListener('click', showPanel);
         tab.innerHTML = _edgeTabInnerHtml();
         placeholder.appendChild(tab);
-    }
-
-    // Draws the eye to the optimizer rail the very first time this user ever opens a
-    // gun's build panel (called from selectGun in gun-list.js), by replaying the
-    // rail's own mouse-leave collapse - no bespoke pulse animation. The tab already ships
-    // with .optimizer-edge-tab-pulse-snap applied (index.html / _ensureEdgeTab above)
-    // so it's rendered fully expanded, transitions disabled, from its very first
-    // paint - there's nothing before that first paint for it to have collapsed FROM,
-    // so there's no collapsed-then-snapped-open flicker to begin with. Removing the
-    // class after a short hold is then just a normal style change back to rest,
-    // which the base rule's own transition (the collapse curve) picks up and
-    // animates - the only motion that ever plays is that one-time collapse.
-    // Deferred two frames before removing it because selectGun un-hides the right
-    // panel (removes .no-gun) in the same tick; we wait for that reveal to commit
-    // and re-query the current tab (the MutationObserver may have re-appended it as
-    // a fresh node) before touching it.
-    const PULSE_HOLD_MS = 555; // how long the rail stays expanded before collapsing
-
-    // Once-ever gate, persisted in localStorage (not sessionStorage/in-memory): once
-    // this user has seen the intro on any visit, it must never play again, on any
-    // future page load or refresh either.
-    const PULSE_SEEN_KEY = 'eftforge_optimizer_intro_pulsed';
-    let _hasPulsed = localStorage.getItem(PULSE_SEEN_KEY) === 'true';
-
-    function pulse() {
-        // Don't burn the once-ever "seen it" flag on a device that never gets
-        // the edge-tab in the first place - a mobile-first visitor should still
-        // get the intro pulse the first time they show up on desktop.
-        if (isMobileLayout() || _hasPulsed) return;
-        _hasPulsed = true;
-        localStorage.setItem(PULSE_SEEN_KEY, 'true');
-        requestAnimationFrame(() => requestAnimationFrame(() => {
-            const tab = document.getElementById('optimizer-edge-tab');
-            if (!tab) return;
-            setTimeout(() => tab.classList.remove('optimizer-edge-tab-pulse-snap'), PULSE_HOLD_MS);
-        }));
     }
 
     /* ===========================
@@ -4336,6 +4284,6 @@ window.EFTForge.optimizer = (function () {
     // Scripts are loaded at the end of <body> so DOM is ready; init immediately.
     init();
 
-    return { showPanel, hidePanel, onBuildLeave, onLangChange, onTraderLevelsChange, pulse };
+    return { showPanel, hidePanel, onBuildLeave, onLangChange, onTraderLevelsChange };
 
 }());

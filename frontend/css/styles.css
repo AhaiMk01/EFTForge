@@ -4864,39 +4864,6 @@ body.bp-working .bp-display-wrap .kb-working-logo,
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
-/* Open-a-gun attention cue - reuses the rail's own mouse-leave collapse, rather than
-   a bespoke pulse animation. EFTForge.optimizer.pulse() (optimizer.js) briefly adds
-   .optimizer-edge-tab-pulse-snap, which forces the rail straight into its expanded
-   (hover) end-state with transitions disabled - an instant, unanimated jump - then
-   immediately removes the class. That removal is a normal style change back to rest,
-   so it's picked up by the base rule's own transition (the collapse curve above,
-   width 0.32s cubic-bezier(0.4,0,0.2,1) etc.) exactly as if the mouse had left after
-   a real hover. Net effect: only the collapse motion ever plays, no expand phase. */
-.optimizer-edge-tab.optimizer-edge-tab-pulse-snap,
-.optimizer-edge-tab.optimizer-edge-tab-pulse-snap .optimizer-edge-tab-glow-rest,
-.optimizer-edge-tab.optimizer-edge-tab-pulse-snap .optimizer-edge-tab-glow-hover,
-.optimizer-edge-tab.optimizer-edge-tab-pulse-snap .optimizer-edge-tab-content {
-    transition: none !important;
-}
-
-.optimizer-edge-tab.optimizer-edge-tab-pulse-snap {
-    width: 158px;
-    backdrop-filter: blur(2px);
-}
-
-.optimizer-edge-tab.optimizer-edge-tab-pulse-snap .optimizer-edge-tab-glow-rest {
-    opacity: 0;
-}
-
-.optimizer-edge-tab.optimizer-edge-tab-pulse-snap .optimizer-edge-tab-glow-hover {
-    opacity: 1;
-}
-
-.optimizer-edge-tab.optimizer-edge-tab-pulse-snap .optimizer-edge-tab-content {
-    opacity: 1;
-    transform: translateX(0);
-}
-
 .price-fetch-placeholder {
     display: flex;
     align-items: center;

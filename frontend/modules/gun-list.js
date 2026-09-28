@@ -590,7 +590,7 @@ function renderGunList(guns, forceStagger = false) {
 // scheduleBuildPreview() image generation for a build nobody will ever see.
 // awaitBuildImage: same caller, installing a saved build - keep the gun images
 // hidden until Kitbash! draws it instead of flashing the factory image first.
-async function selectGun(gun, liElement, { skipTreeRender = false, suppressPulse = false, awaitBuildImage = false } = {}) {
+async function selectGun(gun, liElement, { skipTreeRender = false, awaitBuildImage = false } = {}) {
     // If clicking same gun, do nothing
     if (EFTForge.state.currentGun && EFTForge.state.currentGun.id === gun.id) {
         return;
@@ -637,14 +637,6 @@ async function selectGun(gun, liElement, { skipTreeRender = false, suppressPulse
     const placeholder = document.getElementById("attachment-placeholder");
     if (placeholder) {
         placeholder.style.display = "flex";
-    }
-
-    // Pulse the optimizer edge-rail so opening a gun draws the eye to it - but not
-    // when this selectGun is just re-installing a build for an already-open tab
-    // (suppressPulse, set by tab-manager's _activateTab), otherwise switching
-    // between existing tabs would replay the pulse every time.
-    if (!suppressPulse) {
-        EFTForge.optimizer?.pulse?.();
     }
 
     EFTForge.state.lastParentNode = null;
