@@ -136,8 +136,13 @@
     function injectNewBatch() {
         const entries = [];
         const numDates = 3 + Math.floor(Math.random() * 3);
-        for (let d = 0; d < numDates; d++) {
-            const date = _isoDate(Math.floor(d * 6 / Math.max(numDates - 1, 1)));
+        // A few days inside the recent window, plus older ones so the history picker
+        // has something to page back through.
+        const daysAgo = [];
+        for (let d = 0; d < numDates; d++) daysAgo.push(Math.floor(d * 6 / Math.max(numDates - 1, 1)));
+        daysAgo.push(15 + Math.floor(Math.random() * 10), 45 + Math.floor(Math.random() * 30), 200);
+        daysAgo.forEach(function (ago) {
+            const date = _isoDate(ago);
             const count = 2 + Math.floor(Math.random() * 7);
             for (let i = 0; i < count; i++) {
                 const useWeapon = Math.random() < 0.25;
@@ -151,9 +156,26 @@
                 const pool = Math.random() < 0.25 ? _FAKE_WEAPONS : _FAKE_ATTACHMENTS;
                 entries.push(_makeNewItemEntry(_pick(pool), date));
             }
-        }
+        });
 
-        EFTForge.api.fetchStatChangelog = function () { return Promise.resolve(entries); };
+        // Mirror the backend: no date means the last 8 days, a date means that UTC day.
+        EFTForge.api.fetchStatChangelog = function (date) {
+            if (date) {
+                return Promise.resolve(entries.filter(function (e) { return e.detected_at.slice(0, 10) === date; }));
+            }
+            const cutoff = _isoDate(8);
+            return Promise.resolve(entries.filter(function (e) { return e.detected_at >= cutoff; }));
+        };
+        EFTForge.api.fetchStatChangelogDates = function () {
+            const items = {};
+            entries.forEach(function (e) {
+                const day = e.detected_at.slice(0, 10);
+                (items[day] = items[day] || new Set()).add(e.item_id);
+            });
+            return Promise.resolve(Object.keys(items).sort().reverse().map(function (day) {
+                return { date: day, item_count: items[day].size };
+            }));
+        };
         if (window.EFTForge && EFTForge.tracker) EFTForge.tracker.reload();
 
         console.info('[tracker-devtool] Injected', entries.length, 'fake stat changes.');

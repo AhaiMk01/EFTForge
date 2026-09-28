@@ -6,14 +6,18 @@ window.EFTForge = window.EFTForge || {};
    NEW covers weapons, attachments, and ammo the db picked up that weren't
    present in the previous sync (see backend _build_new_item_logs).
    Supports search and weapon/attachment category filtering.
-   Data window: last 7 days. Badge shows total combined items.
+   Opens on the last 7 days (the badge counts those); the period picker
+   pages back through every past sync day, since the history is never pruned.
    Each column renders incrementally via IntersectionObserver so
    large changelogs never block the main thread.
 ============================================================ */
 
 window.EFTForge.tracker = (function () {
 
-    let _cache       = null;
+    let _cache       = null;  // recent window rows, also feeds the badge
+    let _dates       = null;  // [{ date, item_count }] every day with changes, newest first
+    let _dayCache    = {};    // 'YYYY-MM-DD' -> rows for that one day
+    let _period      = 'recent'; // 'recent' | 'YYYY-MM-DD'
     let _searchQuery = '';
     let _typeFilter  = 'all'; // 'all' | 'weapons' | 'attachments'
     let _searchTimer = null;
@@ -56,6 +60,7 @@ window.EFTForge.tracker = (function () {
         _updateTitle();
         _updateControlLabels();
         _updateLastSynced();
+        _loadDates();
         _loadData();
     }
 
@@ -73,7 +78,8 @@ window.EFTForge.tracker = (function () {
         _updateTitle();
         _updateControlLabels();
         _updateLastSynced();
-        if (_cache) _renderEntries(_filter7d(_cache));
+        _refreshPeriodSelect();
+        _rerender();
     }
 
     /* ===========================
@@ -102,23 +108,87 @@ window.EFTForge.tracker = (function () {
         btn.dataset.badge = count > 0 ? (count > 999 ? '999+' : String(count)) : '';
     }
 
+    // Rows for the selected period, or null while they haven't loaded yet.
+    function _viewData() {
+        if (_period === 'recent') return _cache ? _filter7d(_cache) : null;
+        return _dayCache[_period] || null;
+    }
+
+    function _rerender() {
+        const data = _viewData();
+        if (data) _renderEntries(data);
+    }
+
     async function _loadData() {
-        if (_cache) {
-            _renderEntries(_filter7d(_cache));
+        const data = _viewData();
+        if (data) {
+            _renderEntries(data);
             return;
         }
 
+        const period = _period;
         _showLoading();
 
         try {
-            const data = await EFTForge.api.fetchStatChangelog();
-            _cache = data;
-            _updateBadge(data);
-            _renderEntries(_filter7d(data));
+            if (period === 'recent') {
+                const rows = await EFTForge.api.fetchStatChangelog();
+                _cache = rows;
+                _updateBadge(rows);
+            } else {
+                _dayCache[period] = await EFTForge.api.fetchStatChangelog(period);
+            }
         } catch (err) {
             console.error('[tracker] Load error:', err);
-            _showError();
+            if (period === _period) _showError();
+            return;
         }
+        // The user may have picked another period while this one was in flight.
+        if (period === _period) _rerender();
+    }
+
+    async function _loadDates() {
+        if (_dates) return;
+        try {
+            _dates = await EFTForge.api.fetchStatChangelogDates();
+        } catch (_) {
+            // fail silently - the picker just keeps only the recent window
+            return;
+        }
+        _refreshPeriodSelect();
+    }
+
+    function _setPeriod(period) {
+        if (period === _period) return;
+        _period = period;
+        _loadData();
+    }
+
+    function _refreshPeriodSelect() {
+        const sel = document.getElementById('tracker-period-select');
+        if (!sel) return;
+        const t = EFTForge.lang.t;
+        const options = [{ value: 'recent', label: t('tracker.period.recent') }];
+        (_dates || []).forEach(function (d) {
+            options.push({
+                value: d.date,
+                label: EFTForge.lang.tFmt('tracker.period.day', { date: _formatDate(d.date), count: d.item_count }),
+            });
+        });
+        // Fall back to the recent window if the picked day is no longer listed.
+        const stale = !options.some(function (o) { return o.value === _period; });
+        if (stale) _period = 'recent';
+
+        document.getElementById('tracker-period-select-custom')?.remove();
+        while (sel.options.length) sel.remove(0);
+        options.forEach(function (opt) {
+            const o = document.createElement('option');
+            o.value = opt.value;
+            o.textContent = opt.label;
+            if (opt.value === _period) o.selected = true;
+            sel.appendChild(o);
+        });
+        setupCustomSelect('tracker-period-select');
+        if (stale) _loadData();
     }
 
     async function _updateLastSynced() {
@@ -275,7 +345,7 @@ window.EFTForge.tracker = (function () {
         const columns = document.getElementById('tracker-columns');
         if (items.length === 0) {
             if (hint) {
-                hint.textContent = EFTForge.lang.t('tracker.empty');
+                hint.textContent = EFTForge.lang.t(_period === 'recent' ? 'tracker.empty' : 'tracker.emptyDay');
                 hint.style.display = '';
             }
             if (columns) columns.style.display = 'none';
@@ -567,9 +637,7 @@ window.EFTForge.tracker = (function () {
             searchInput.addEventListener('input', function (e) {
                 _searchQuery = e.target.value || '';
                 clearTimeout(_searchTimer);
-                _searchTimer = setTimeout(function () {
-                    if (_cache) _renderEntries(_filter7d(_cache));
-                }, 200);
+                _searchTimer = setTimeout(_rerender, 200);
             });
         }
 
@@ -582,8 +650,14 @@ window.EFTForge.tracker = (function () {
                 filterWrap.querySelectorAll('.tracker-filter-btn').forEach(function (b) {
                     b.classList.toggle('active', b === btn);
                 });
-                if (_cache) _renderEntries(_filter7d(_cache));
+                _rerender();
             });
+        }
+
+        const periodSel = document.getElementById('tracker-period-select');
+        if (periodSel) {
+            periodSel.addEventListener('change', function (e) { _setPeriod(e.target.value); });
+            _refreshPeriodSelect();
         }
 
         _prefetch();
@@ -591,8 +665,11 @@ window.EFTForge.tracker = (function () {
 
     function reload() {
         _cache = null;
+        _dates = null;
+        _dayCache = {};
         const overlay = document.getElementById('tracker-overlay');
         if (overlay && overlay.classList.contains('visible')) {
+            _loadDates();
             _loadData();
         } else {
             _prefetch();

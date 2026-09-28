@@ -7065,6 +7065,19 @@ button.build-tag-chip.active {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .tracker-search::placeholder { color: #444; }
+.tracker-period-wrap {
+  position: relative;
+  width: 200px;
+  flex-shrink: 0;
+}
+#tracker-period-select {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+.tracker-period-wrap .custom-select-wrapper { width: 100%; }
 .tracker-type-filter {
   display: flex;
   gap: 4px;
@@ -7267,6 +7280,7 @@ button.build-tag-chip.active {
   }
   .tracker-controls { padding: 6px 10px; flex-wrap: wrap; }
   .tracker-type-filter { width: 100%; }
+  .tracker-period-wrap { width: 100%; }
   .tracker-filter-btn { flex: 1; }
   .tracker-col { min-width: 160px; }
 }

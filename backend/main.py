@@ -5454,56 +5454,82 @@ def get_leaderboard_attachments(
     ]
 
 
-@app.get("/stat-changelog")
-def get_stat_changelog(
+def _changelog_items(db: Session, item_ids) -> dict:
+    # Look up the changelog's items that the tracker still shows: weapons, ammo and
+    # anything that fits a slot. Items since removed from the game drop out here.
+    item_ids = list(item_ids)
+    if not item_ids:
+        return {}
+    items_map = {item.id: item for item in db.query(Item).filter(Item.id.in_(item_ids)).all()}
+    attachment_ids = {
+        row[0]
+        for row in db.query(SlotAllowedItem.allowed_item_id)
+        .filter(SlotAllowedItem.allowed_item_id.in_(item_ids))
+        .distinct()
+        .all()
+    }
+    return {
+        item_id: item
+        for item_id, item in items_map.items()
+        if item.is_weapon or item.is_ammo or item_id in attachment_ids
+    }
+
+
+@app.get("/stat-changelog/dates")
+def get_stat_changelog_dates(
     db: Session = Depends(get_db),
     changelog_db: Session = Depends(get_changelog_db),
 ):
-    cutoff = datetime.now(timezone.utc) - timedelta(days=8)
-    rows = (
-        changelog_db.query(StatChangeLog)
-        .filter(StatChangeLog.detected_at >= cutoff)
-        .order_by(StatChangeLog.detected_at.desc())
-        .all()
-    )
+    # Every UTC day that logged a change, newest first, with how many tracked items
+    # changed that day. The tracker's history picker lists these.
+    pairs = changelog_db.query(func.date(StatChangeLog.detected_at), StatChangeLog.item_id).distinct().all()
+    tracked = _changelog_items(db, {item_id for _, item_id in pairs})
+    counts = {}
+    for day, item_id in pairs:
+        if day and item_id in tracked:
+            counts[day] = counts.get(day, 0) + 1
+    return [{"date": day, "item_count": counts[day]} for day in sorted(counts, reverse=True)]
 
-    item_ids = list({r.item_id for r in rows})
-    items_map = {item.id: item for item in db.query(Item).filter(Item.id.in_(item_ids)).all()} if item_ids else {}
 
-    attachment_ids = (
-        {
-            row[0]
-            for row in db.query(SlotAllowedItem.allowed_item_id)
-            .filter(SlotAllowedItem.allowed_item_id.in_(item_ids))
-            .distinct()
-            .all()
-        }
-        if item_ids
-        else set()
-    )
+@app.get("/stat-changelog")
+def get_stat_changelog(
+    date: str | None = None,
+    db: Session = Depends(get_db),
+    changelog_db: Session = Depends(get_changelog_db),
+):
+    # With no date we serve the rolling recent window the tracker opens on (and older
+    # clients still expect); with a YYYY-MM-DD date we serve that one UTC day from the
+    # full history, which is never pruned.
+    query = changelog_db.query(StatChangeLog)
+    if date is None:
+        query = query.filter(StatChangeLog.detected_at >= datetime.now(timezone.utc) - timedelta(days=8))
+    else:
+        try:
+            day_start = datetime.strptime(date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=422, detail="date must be YYYY-MM-DD")
+        query = query.filter(
+            StatChangeLog.detected_at >= day_start,
+            StatChangeLog.detected_at < day_start + timedelta(days=1),
+        )
+    rows = query.order_by(StatChangeLog.detected_at.desc()).all()
 
-    def _is_tracked_item(item_id):
-        item = items_map.get(item_id)
-        if item is None:
-            return False
-        return item.is_weapon or item_id in attachment_ids or item.is_ammo
-
-    rows = [r for r in rows if _is_tracked_item(r.item_id)]
-
+    items_map = _changelog_items(db, {r.item_id for r in rows})
     return [
         {
             "item_id": row.item_id,
-            "item_name": items_map[row.item_id].name if row.item_id in items_map else row.item_name,
-            "item_name_zh": items_map[row.item_id].name_zh if row.item_id in items_map else None,
-            "icon_link": items_map[row.item_id].icon_link if row.item_id in items_map else None,
-            "is_weapon": items_map[row.item_id].is_weapon if row.item_id in items_map else None,
-            "is_ammo": items_map[row.item_id].is_ammo if row.item_id in items_map else None,
+            "item_name": item.name,
+            "item_name_zh": item.name_zh,
+            "icon_link": item.icon_link,
+            "is_weapon": item.is_weapon,
+            "is_ammo": item.is_ammo,
             "stat_name": row.stat_name,
             "old_value": row.old_value,
             "new_value": row.new_value,
             "detected_at": row.detected_at.isoformat() if row.detected_at else None,
         }
         for row in rows
+        if (item := items_map.get(row.item_id)) is not None
     ]
 
 
