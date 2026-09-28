@@ -18,6 +18,7 @@ window.EFTForge = window.EFTForge || {};
     const MODE_KEY   = "eftforge_builder_mode";   // "3d" | "2d"
     const PICKER_KEY = "eftforge_b3d_picker";     // "table" | "game"
     const DOCK_KEY   = "eftforge_b3d_stats_dock"; // {pos: [fx, fy], collapsed}
+    const INTRO_KEY  = "eftforge_b3d_intro_done"; // "1" once the first-use intro is through
     const READY_TIMEOUT_MS = 25000;
     const CALL_TIMEOUT_MS  = 20000;
     const PROTOCOL = 1;
@@ -370,6 +371,7 @@ window.EFTForge = window.EFTForge || {};
             }
             onStats();
             _checkModels(payload.items, key);
+            _introOnBuild();
         } catch (err) {
             if (key === _syncedKey) { _drawing = false; _setLoading(false); }
             console.warn("[builder-3d] setBuild failed:", err.message);
@@ -484,6 +486,7 @@ window.EFTForge = window.EFTForge || {};
     }
 
     function _onSlotClick(data) {
+        if (_intro) return; // the intro's camera step lets the pointer through, not the slots
         const hit = _resolveSlot(data.key);
         if (!hit) {
             console.warn("[builder-3d] no workbench slot for", data.key);
@@ -726,7 +729,7 @@ window.EFTForge = window.EFTForge || {};
     function _keyBlocked(e) {
         if (!isActive() || !_ready || e.ctrlKey || e.metaKey) return true;
         if (_typing(document.activeElement) || _typing(e.target)) return true;
-        if (document.querySelector(".modal-overlay")) return true;
+        if (_intro || document.querySelector(".modal-overlay")) return true;
         return document.getElementById("main-container")?.hasAttribute("inert");
     }
 
@@ -983,6 +986,366 @@ window.EFTForge = window.EFTForge || {};
         }
     }
 
+    // --------------------------------------------------------- first-use intro
+
+    // Shown over the whole 3D view until the user clicks through it once: a welcome screen
+    // with both wordmarks, a short tour on the user's own gun (the camera, a filled slot and
+    // the compact picker, the Current Build panel, the sight picture), then the in-game
+    // performance warning. The viewer starts and draws the build behind the welcome screen
+    // with the loading veil hidden (styles.css, body.b3d-intro), so the gun is usually
+    // waiting by the time the tour needs it. Leaving the view mid-way keeps the step for
+    // this session and shows the intro again next time.
+    const INTRO_STEPS = ["welcome", "camera", "slots", "panels", "sight", "warn"];
+    const TOUR_STEPS = new Set(["camera", "slots", "panels", "sight"]);
+    // The slot the tour points at, best first (game slot names, prefixes of numbered ones).
+    const INTRO_SLOT_PREF = ["mod_scope", "mod_muzzle", "mod_handguard", "mod_stock", "mod_pistol_grip",
+        "mod_magazine", "mod_sight_rear", "mod_mount", "mod_barrel"];
+    let _intro = null, _introStep = 0, _introSeq = 0, _introResizeTimer = 0;
+    let _introInert = [];         // what _lockPage made inert, to give back
+
+    // While the intro is up nothing else on the page responds: every element beside the
+    // intro's branch, the viewer's own buttons included, goes inert. The frame stays live for
+    // the camera step, and toasts stay clickable.
+    function _lockPage(on) {
+        if (!on) {
+            _introInert.forEach(el => el.removeAttribute("inert"));
+            _introInert = [];
+            return;
+        }
+        const keep = new Set([_stage, document.getElementById("toast-container")]);
+        const lock = (el) => {
+            if (!el || el.hasAttribute("inert")) return;
+            el.setAttribute("inert", "");
+            _introInert.push(el);
+        };
+        for (let node = _intro; node && node !== document.body; node = node.parentElement) {
+            for (const sib of node.parentElement.children) {
+                if (sib !== node && !keep.has(sib) && sib.tagName !== "SCRIPT" && sib.tagName !== "STYLE") lock(sib);
+            }
+        }
+        lock(_hud);
+    }
+
+    // Keys stop here before any of the app's shortcuts (undo, type-to-search, Esc) see them;
+    // Enter, Space and Tab still work the intro's own buttons.
+    window.addEventListener("keydown", (e) => { if (_intro) e.stopPropagation(); }, true);
+
+    // The image generation disclaimer's warning triangle (build-preview.js history).
+    const _WARN_SVG = '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">' +
+        '<path d="M10 2L18 17H2L10 2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>' +
+        '<line x1="10" y1="7.5" x2="10" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' +
+        '<circle cx="10" cy="14.5" r="1.2" fill="currentColor"/></svg>';
+
+    function _introDone() { return _read(INTRO_KEY, "") === "1"; }
+
+    function _mountIntro(container) {
+        if (_intro || _introDone()) return;
+        _intro = document.createElement("div");
+        _intro.id = "b3d-intro";
+        _intro.setAttribute("role", "dialog");
+        _intro.setAttribute("aria-modal", "true");
+        _intro.setAttribute("aria-labelledby", "b3d-intro-title");
+        container.appendChild(_intro);
+        document.body.classList.add("b3d-intro");
+        _lockPage(true);
+        _renderIntro();
+    }
+
+    function _unmountIntro() {
+        _introSeq++;
+        clearTimeout(_introResizeTimer);
+        _lockPage(false);
+        _intro?.remove();
+        _intro = null;
+        document.body.classList.remove("b3d-intro");
+    }
+
+    function _goIntro(step) {
+        _introStep = Math.max(0, Math.min(INTRO_STEPS.length - 1, step));
+        _renderIntro();
+    }
+
+    function _finishIntro() {
+        _write(INTRO_KEY, "1");
+        if (_ready && _viewMode === "sight") send("exitSight");
+        _unmountIntro();
+    }
+
+    // A tour step follows the build (a tab or gun switch); every step with a hole in it
+    // follows the window size.
+    function _introOnBuild() {
+        if (_intro && TOUR_STEPS.has(INTRO_STEPS[_introStep])) _renderIntro();
+    }
+    function _introOnResize() {
+        if (!_intro || INTRO_STEPS[_introStep] === "welcome") return;
+        clearTimeout(_introResizeTimer);
+        _introResizeTimer = setTimeout(_renderIntro, 150);
+    }
+
+    function _introDotsHtml() {
+        return `<span class="b3d-intro-dots" aria-hidden="true">${INTRO_STEPS.map((_, i) =>
+            `<i class="${i === _introStep ? "on" : ""}"></i>`).join("")}</span>`;
+    }
+
+    function _introFootHtml({ prev = true, skip = false } = {}) {
+        const last = _introStep === INTRO_STEPS.length - 1;
+        return `
+            <div class="b3d-intro-foot">
+                ${_introDotsHtml()}
+                <div class="b3d-intro-btns">
+                    ${skip ? `<button class="b3d-intro-skip" type="button">${_t("b3d.introSkip")}</button>` : ""}
+                    ${prev ? `<button class="modal-btn b3d-intro-btn b3d-intro-prev" type="button">${_t("b3d.introPrev")}</button>` : ""}
+                    <button class="modal-btn primary b3d-intro-btn b3d-intro-next" type="button">${_t(last ? "b3d.introContinue" : "b3d.introNext")}</button>
+                </div>
+            </div>`;
+    }
+
+    function _bindIntro() {
+        _intro.querySelector(".b3d-intro-prev")?.addEventListener("click", () => _goIntro(_introStep - 1));
+        _intro.querySelector(".b3d-intro-skip")?.addEventListener("click", () => _goIntro(INTRO_STEPS.indexOf("warn")));
+        const next = _intro.querySelector(".b3d-intro-next");
+        next.addEventListener("click", () => {
+            if (_introStep === INTRO_STEPS.length - 1) _finishIntro(); else _goIntro(_introStep + 1);
+        });
+        // Enter or Space moves on, without a stray key reaching the viewer.
+        next.focus({ preventScroll: true });
+    }
+
+    function _renderIntro() {
+        if (!_intro) return;
+        const seq = ++_introSeq;
+        const step = INTRO_STEPS[_introStep];
+        // Only the sight step looks through the sights; any other step glides back out.
+        if (step !== "sight" && _ready && _viewMode === "sight") send("exitSight");
+        if (TOUR_STEPS.has(step)) { _renderTourStep(step, seq); return; }
+        const warn = step === "warn";
+        const art = warn
+            ? `<div class="b3d-intro-warn">${_WARN_SVG}</div>`
+            : `<div class="b3d-intro-marks">
+                   <img class="b3d-intro-mark-eftforge" src="./assets/images/title.svg" alt="EFTForge" draggable="false" />
+                   <span class="b3d-intro-divider" aria-hidden="true"></span>
+                   <img class="b3d-intro-mark-kitbash" src="./assets/images/kitbash-wordmark-arcadia.png" alt="Kitbash! Arcadia" draggable="false" />
+               </div>`;
+        const key = warn ? "b3d.introWarn" : "b3d.introWelcome";
+        _intro.className = warn ? "b3d-intro-warning" : "";
+        _intro.innerHTML = `
+            <div class="b3d-intro-body">
+                ${art}
+                <h2 id="b3d-intro-title" class="b3d-intro-title">${_t(key + "Title")}</h2>
+                <p class="b3d-intro-text">${_t(key + "Body")}</p>
+                ${warn ? `<p class="b3d-intro-text b3d-intro-note">${_t("b3d.introWarnToggle")}</p>` : ""}
+                ${_introFootHtml({ prev: warn, skip: !warn })}
+            </div>`;
+        _bindIntro();
+        if (warn) _lockOnModeToggle(seq);
+    }
+
+    // The last screen locks onto the 2D/3D switch at the top left, so the way back to the
+    // legacy 2D builder is never a mystery. Coming from the sight picture, the top left
+    // controls stay hidden until the glide back ends, so the lock-on waits for that.
+    async function _lockOnModeToggle(seq) {
+        const live = () => seq === _introSeq && !!_intro;
+        if (_viewMode === "sight" && !await _introWait(() => _viewMode === "orbit", 3000, live) && !live()) return;
+        const toggle = _introRect(_el("b3d-mode-toggle"), 6, 6);
+        if (!toggle) return;
+        _intro.classList.add("b3d-intro-holed");
+        _intro.insertAdjacentHTML("afterbegin", _introVeilSvg(0.9, [toggle]));
+    }
+
+    // Resolves true once cond() holds, false when the step moved on or time ran out.
+    function _introWait(cond, ms, live) {
+        const end = performance.now() + ms;
+        return new Promise(resolve => {
+            const tick = () => {
+                if (!live()) resolve(false);
+                else if (cond()) resolve(true);
+                else if (performance.now() > end) resolve(false);
+                else setTimeout(tick, 100);
+            };
+            tick();
+        });
+    }
+
+    // An element's box in the intro's pixels (the intro and the frame both fill the build area).
+    function _introRect(el, pad = 0, radius = 0) {
+        if (!el || !el.offsetParent) return null;
+        const o = _intro.getBoundingClientRect(), r = el.getBoundingClientRect();
+        if (!r.width || !r.height) return null;
+        return { left: r.left - o.left - pad, top: r.top - o.top - pad, right: r.right - o.left + pad, bottom: r.bottom - o.top + pad, radius };
+    }
+
+    function _overlaps(a, b) {
+        return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    }
+
+    // A filled slot whose box is on screen, preferring one none of our panels cover.
+    async function _introPickSlot(live) {
+        const slots = await call("slots").catch(() => []);
+        if (!live()) return null;
+        const rank = (s) => {
+            const name = s.key.slice(s.key.indexOf("/") + 1);
+            const i = INTRO_SLOT_PREF.findIndex(p => name.startsWith(p));
+            return i < 0 ? INTRO_SLOT_PREF.length : i;
+        };
+        const filled = (slots || []).filter(s => s.child?.shown && _resolveSlot(s.key)).sort((a, b) => rank(a) - rank(b));
+        const W = _intro.clientWidth, H = _intro.clientHeight, M = 8;
+        const covers = [_dock, _topLeft, _hud?.querySelector(".b3d-viewbtns"), ...(_hud?.querySelectorAll(".b3d-panel") || [])]
+            .map(el => _introRect(el)).filter(Boolean);
+        let fallback = null;
+        for (const s of filled.slice(0, 12)) {
+            const r = await call("slotRect", s.key).catch(() => null);
+            if (!live()) return null;
+            if (!r || r.left < M || r.top < M || r.right > W - M || r.bottom > H - M) continue;
+            if (!covers.some(c => _overlaps(r, c))) return { slot: s, rect: r };
+            fallback ??= { slot: s, rect: r };
+        }
+        return fallback;
+    }
+
+    // The slot box once it holds still (a new gun's reset glides the camera for a moment).
+    async function _introSteadyRect(key, first, live) {
+        let last = first;
+        for (let i = 0; i < 15; i++) {
+            await new Promise(res => setTimeout(res, 100));
+            const r = await call("slotRect", key).catch(() => null);
+            if (!live()) return null;
+            if (!r) return last;
+            if (Math.abs(r.left - last.left) < 1 && Math.abs(r.top - last.top) < 1) return r;
+            last = r;
+        }
+        return last;
+    }
+
+    function _introKeysHtml(rows) {
+        return `<div class="b3d-intro-keys">${rows.map(([keys, action]) =>
+            `<span class="b3d-intro-key">${_t(keys)}</span><span class="b3d-intro-action">${_t(action)}</span>`).join("")}</div>`;
+    }
+
+    async function _renderTourStep(step, seq) {
+        const live = () => seq === _introSeq && !!_intro;
+        const esc = (s) => escapeHtml(String(s ?? ""));
+        // Until the gun is drawn: the jumping Kitbash! wordmark over the veil (after half a
+        // second, so a gun that is nearly there never flashes it).
+        if (!_ready || _drawing) {
+            _intro.className = "";
+            _intro.innerHTML = `<div class="kb-working">${_bpWorkingLogoHtml()}</div>`;
+            if (!await _introWait(() => _ready && !_drawing, READY_TIMEOUT_MS, live)) return;
+        }
+        closePicker();
+        if (step !== "sight" && !await _introWait(() => _viewMode === "orbit", 3000, live) && !live()) return;
+
+        const gun = EFTForge.state.currentGun;
+        const holes = [];
+        let veil = 0.35, anchor = null, sides = [], body = "";
+        if (step === "camera") {
+            body = `<p class="b3d-intro-card-text">${EFTForge.lang.tFmt("b3d.introCameraBody", { gun: esc(gun?.short_name || gun?.name) })}</p>` +
+                _introKeysHtml([
+                    ["b3d.introKeyDrag", "b3d.introRotate"],
+                    ["b3d.introKeyPan", "b3d.introPan"],
+                    ["b3d.introKeyWheel", "b3d.introZoom"],
+                    ["b3d.introKeyDouble", "b3d.introReset"],
+                ]);
+        } else if (step === "slots") {
+            veil = 0.72;
+            const pick = await _introPickSlot(live);
+            if (!live()) return;
+            let text = _t("b3d.introSlotsBodyAny");
+            if (pick) {
+                const r = await _introSteadyRect(pick.slot.key, pick.rect, live);
+                if (!live()) return;
+                anchor = { left: r.left - 4, top: r.top - 4, right: r.right + 4, bottom: r.bottom + 4, radius: 0 };
+                holes.push(anchor);
+                sides = ["below", "above", "right", "left"];
+                const part = partName(pick.slot.child.id);
+                if (part) text = EFTForge.lang.tFmt("b3d.introSlotsBody", { part: esc(part) });
+            }
+            const toggle = _introRect(_pickerToggle, 6, 6);
+            if (toggle) holes.push(toggle);
+            body = `<p class="b3d-intro-card-text">${text}</p>` +
+                _introKeysHtml([["b3d.introKeyLeft", "b3d.introPick"], ["b3d.introKeyRight", "b3d.introRemove"]]) +
+                `<p class="b3d-intro-card-note">${_t("b3d.introSlotsPicker")}</p>`;
+        } else if (step === "panels") {
+            veil = 0.72;
+            anchor = _introRect(_dock, 6, 10);
+            if (anchor) holes.push(anchor);
+            sides = ["right", "below", "left", "above"];
+            body = `<p class="b3d-intro-card-text">${_t("b3d.introPanelsBody")}</p>` +
+                `<p class="b3d-intro-card-note">${_t("b3d.introPanelsMove")}</p>`;
+        } else if (step === "sight") {
+            veil = 0.25;
+            let entered = _viewMode === "sight";
+            if (!entered) entered = !!await call("enterSight", false).catch(() => false);
+            if (!live()) return;
+            let text = _t("b3d.introSightBodyNone");
+            if (entered) {
+                const st = await call("sightState").catch(() => null);
+                if (!live()) return;
+                const cur = st?.sights?.[st.sightIndex];
+                const name = (cur && partName(cur.partId)) || st?.label;
+                text = EFTForge.lang.tFmt("b3d.introSightBody", { sight: esc(name || _t("b3d.introSightFallback")) });
+            }
+            body = `<p class="b3d-intro-card-text">${text}</p>`;
+        }
+
+        // The camera step lets the pointer through, so the user can try the controls right away.
+        _intro.className = step === "camera" ? "b3d-intro-tour b3d-intro-live" : "b3d-intro-tour";
+        _intro.innerHTML = _introVeilSvg(veil, holes) + `
+            <div class="b3d-intro-card">
+                <div id="b3d-intro-title" class="b3d-intro-card-title">${_t(`b3d.intro${step[0].toUpperCase()}${step.slice(1)}Title`)}</div>
+                ${body}
+                ${_introFootHtml({ skip: true })}
+            </div>`;
+        _placeIntroCard(_intro.querySelector(".b3d-intro-card"), anchor, sides);
+        _bindIntro();
+    }
+
+    // The veil with a see-through hole over each thing the step points at. Each hole locks on
+    // as the optimizer's first solved point does (optimizer-explore-point-lockon): a ring
+    // closing in from well outside it and fading. Its outline then fades in with a gold
+    // gradient sweeping round it, breathing in and out while the step shows.
+    const LOCKON_REACH = 90; // how far outside the hole the lock-on ring starts, in px
+
+    function _introVeilSvg(alpha, holes) {
+        const rect = (h, attrs) => `<rect x="${Math.round(h.left)}" y="${Math.round(h.top)}" width="${Math.round(h.right - h.left)}" ` +
+            `height="${Math.round(h.bottom - h.top)}" rx="${h.radius || 0}" ${attrs}/>`;
+        const lockon = (h) => {
+            const w = Math.max(1, h.right - h.left), ht = Math.max(1, h.bottom - h.top);
+            const sx = ((w + 2 * LOCKON_REACH) / w).toFixed(3), sy = ((ht + 2 * LOCKON_REACH) / ht).toFixed(3);
+            return rect(h, `class="b3d-intro-lockon" style="--sx:${sx};--sy:${sy}"`);
+        };
+        return `<svg class="b3d-intro-veil" aria-hidden="true">
+            <defs>
+                <mask id="b3d-intro-mask"><rect width="100%" height="100%" fill="#fff"/>${holes.map(h => rect(h, 'fill="#000"')).join("")}</mask>
+                <linearGradient id="b3d-intro-grad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stop-color="#f5c542"/><stop offset="0.5" stop-color="#fff1bf"/><stop offset="1" stop-color="#f5c542"/>
+                    <animateTransform attributeName="gradientTransform" type="rotate" from="0 0.5 0.5" to="360 0.5 0.5" dur="3s" repeatCount="indefinite"/>
+                </linearGradient>
+            </defs>
+            <rect width="100%" height="100%" fill="rgba(8, 8, 8, ${alpha})" mask="url(#b3d-intro-mask)"/>
+            ${holes.map(h => rect(h, 'class="b3d-intro-ring" stroke="url(#b3d-intro-grad)"') + lockon(h)).join("")}
+        </svg>`;
+    }
+
+    // Beside the anchor on the first side it fits, else bottom centre; always inside the view.
+    function _placeIntroCard(card, anchor, sides) {
+        const W = _intro.clientWidth, H = _intro.clientHeight, w = card.offsetWidth, h = card.offsetHeight;
+        const GAP = 16, M = 12;
+        let x = (W - w) / 2, y = H - h - 40;
+        if (anchor) {
+            const cx = (anchor.left + anchor.right) / 2 - w / 2, cy = (anchor.top + anchor.bottom) / 2 - h / 2;
+            const at = {
+                right: [anchor.right + GAP, cy, anchor.right + GAP + w <= W - M],
+                left:  [anchor.left - GAP - w, cy, anchor.left - GAP - w >= M],
+                below: [cx, anchor.bottom + GAP, anchor.bottom + GAP + h <= H - M],
+                above: [cx, anchor.top - GAP - h, anchor.top - GAP - h >= M],
+            };
+            const side = sides.find(s => at[s][2]);
+            if (side) [x, y] = at[side];
+        }
+        card.style.left = Math.round(Math.max(M, Math.min(W - w - M, x))) + "px";
+        card.style.top = Math.round(Math.max(M, Math.min(H - h - M, y))) + "px";
+    }
+
     function _enter3d() {
         if (isActive()) return;
         _buildChrome();
@@ -1011,6 +1374,7 @@ window.EFTForge = window.EFTForge || {};
         _holds = 0;
         _setLoading(true, { delayed: false });
         container.prepend(_stage);
+        _mountIntro(container);
         _ready = false;
         _viewMode = "orbit";
         _resetOnOrbit = false;
@@ -1039,6 +1403,7 @@ window.EFTForge = window.EFTForge || {};
         _pending.clear();
         _queue = [];
         EFTForge.builder3dPanels?.unmount();
+        _unmountIntro();
         _stage?.remove();
         _stage = _frame = _hud = _loading = null;
         _ready = false;
@@ -1119,6 +1484,7 @@ window.EFTForge = window.EFTForge || {};
 
     // Right-clicking a slot box empties it, as right-clicking a workbench slot does in 2D.
     function _onSlotRightClick(data) {
+        if (_intro) return;
         const hit = _resolveSlot(data.key);
         if (!hit) return;
         if (EFTForge.state.publishMode) { _showPublishLockedToast(); return; }
@@ -1139,7 +1505,7 @@ window.EFTForge = window.EFTForge || {};
     }
 
     window.addEventListener("message", _onMessage);
-    window.addEventListener("resize", () => { if (isActive()) { _placeDock(); _sendBackdrop(); } });
+    window.addEventListener("resize", () => { if (isActive()) { _placeDock(); _sendBackdrop(); _introOnResize(); } });
 
     // Every build change renders the workbench (attachment-grid.js, build-preview.js
     // chain on renderFullTree); we chain on top and sync the view from there.
@@ -1165,5 +1531,6 @@ window.EFTForge = window.EFTForge || {};
         call, send,
         get mode() { return _mode; },
         get pickerStyle() { return _pickerStyle; },
+        get introActive() { return !!_intro; },
     };
 })();

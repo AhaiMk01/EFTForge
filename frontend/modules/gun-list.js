@@ -549,7 +549,11 @@ function renderGunList(guns, forceStagger = false) {
         card.setAttribute("role", "button");
         card.setAttribute("aria-label", gun.name);
         card.onclick = gun.caliber === 'Caliber20x1mm'
-            ? () => _selectGunOrRestoreSnapshot(gun, card).then(() => EFTForge.news.showSecretPost())
+            // The 3D builder's first-use intro goes first: no secret post over it (the
+            // page is locked meanwhile), it waits for the next time the toy gun opens.
+            ? () => _selectGunOrRestoreSnapshot(gun, card).then(() => {
+                if (!EFTForge.builder3d?.introActive) EFTForge.news.showSecretPost();
+            })
             : () => _selectGunOrRestoreSnapshot(gun, card);
         card.addEventListener("keydown", (e) => {
           if (e.key === "Enter" || e.key === " ") {
