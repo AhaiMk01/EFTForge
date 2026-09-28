@@ -25,8 +25,13 @@ window.EFTForge.config = {
     COMMUNITY_DISABLED: !!(_desktop && _desktop.communityMode === "local"),
 
     // The Kitbash! 3D viewer's embeddable page (an iframe, driven over postMessage).
-    // Null leaves the builder 2D only. Local dev serves the Kitbash! repo root on 8765.
-    VIEWER_URL: _isLocalDev && !_desktop ? "http://127.0.0.1:8765/viewer/frame.html" : null,
+    // Null leaves the builder 2D only. Local dev serves the Kitbash! repo root on 8765,
+    // production loads it from the Kitbash! CDN. The desktop app only reaches the CDN in
+    // connected mode: fully local mode talks to no live service, so it stays 2D.
+    VIEWER_URL: _desktop
+        ? (_desktop.communityMode === "connected" ? "https://kitbash.eftforge.com/viewer/frame.html" : null)
+        : _isLocalDev ? "http://127.0.0.1:8765/viewer/frame.html"
+        : "https://kitbash.eftforge.com/viewer/frame.html",
 
     // Static announcements fetched as fallback when the backend is unreachable.
     // Edit frontend/offline/announcements.json and deploy - nginx serves it at the same path in production.
