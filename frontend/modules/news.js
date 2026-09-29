@@ -16,6 +16,10 @@ window.EFTForge = window.EFTForge || {};
      stored in localStorage('eftforge_news_seen'), the drawer
      opens automatically. Closing the drawer saves the latest
      post ID so it won't auto-open again until a new post lands.
+
+   The 3D builder's first-use tour always wins: it locks the rest
+   of the page, so news asked for while it is up waits until it
+   ends, and news already open steps aside and comes back after.
 ============================================================ */
 
 window.EFTForge.news = (function () {
@@ -47,6 +51,7 @@ window.EFTForge.news = (function () {
     const _postCache    = {};    // file path -> markdown string
     let _currentView  = 'list'; // 'list' | 'post'
     let _currentPostId = null;
+    let _deferred     = null;   // what to open once the 3D tour ends: { postId } or {} for the list
 
     /* ===========================
        PUBLIC API
@@ -81,6 +86,7 @@ window.EFTForge.news = (function () {
         const overlay  = document.getElementById('news-overlay');
         const backdrop = document.getElementById('news-backdrop');
         if (!overlay) return;
+        if (_tourUp()) { _deferred = {}; return; }
 
         _currentView   = 'list';
         _currentPostId = null;
@@ -115,6 +121,7 @@ window.EFTForge.news = (function () {
         const overlay  = document.getElementById('news-overlay');
         const backdrop = document.getElementById('news-backdrop');
         if (!overlay) return;
+        if (_tourUp()) { _deferred = { postId: postId }; return; }
 
         overlay.classList.add('visible');
         if (backdrop) backdrop.classList.add('visible');
@@ -165,24 +172,29 @@ window.EFTForge.news = (function () {
     }
 
     function hidePage() {
-        const overlay  = document.getElementById('news-overlay');
-        const backdrop = document.getElementById('news-backdrop');
-        if (!overlay) return;
-
-        overlay.classList.remove('visible');
-        if (backdrop) backdrop.classList.remove('visible');
-        document.getElementById('main-container')?.removeAttribute('inert');
-
-        _currentView   = 'list';
-        _currentPostId = null;
+        if (!_closeOverlay()) return;
 
         // Mark the latest non-dev post as seen so it won't auto-open again
         const seenPost = (_manifest && _manifest.posts || []).find(function (p) { return !p._dev; });
         if (seenPost) localStorage.setItem(SEEN_KEY, seenPost.id);
+    }
 
-        if (location.hash.startsWith('#news')) {
-            history.replaceState(null, '', location.pathname + location.search);
-        }
+    // Called by builder-3d.js as its first-use tour mounts: the tour locks everything
+    // else, so an open news drawer would sit there unclickable. Put it away unread and
+    // reopen it where it was once the tour ends.
+    function yieldToTour() {
+        const overlay = document.getElementById('news-overlay');
+        if (!overlay || !overlay.classList.contains('visible')) return;
+        _deferred = _currentView === 'post' && _currentPostId ? { postId: _currentPostId } : {};
+        _closeOverlay();
+    }
+
+    // Called by builder-3d.js once its tour is gone (finished, or the 3D view closed).
+    function onTourEnd() {
+        const next = _deferred;
+        _deferred = null;
+        if (!next || _tourUp()) return;
+        if (next.postId) showPost(next.postId); else showPage();
     }
 
     // Called by switchLang() in app.js after a language change
@@ -200,6 +212,29 @@ window.EFTForge.news = (function () {
     /* ===========================
        PRIVATE - DEV POST INJECTION
     =========================== */
+
+    function _tourUp() {
+        return !!(window.EFTForge.builder3d && EFTForge.builder3d.introActive);
+    }
+
+    // Hide the drawer without marking anything seen; false when it wasn't there to hide.
+    function _closeOverlay() {
+        const overlay  = document.getElementById('news-overlay');
+        const backdrop = document.getElementById('news-backdrop');
+        if (!overlay) return false;
+
+        overlay.classList.remove('visible');
+        if (backdrop) backdrop.classList.remove('visible');
+        document.getElementById('main-container')?.removeAttribute('inert');
+
+        _currentView   = 'list';
+        _currentPostId = null;
+
+        if (location.hash.startsWith('#news')) {
+            history.replaceState(null, '', location.pathname + location.search);
+        }
+        return true;
+    }
 
     function _isDevMode() {
         const h = location.hostname;
@@ -537,6 +572,6 @@ window.EFTForge.news = (function () {
         showPost(_SECRET_POST.id);
     }
 
-    return { init, showPage, showPost, showSecretPost, hidePage, onLangChange };
+    return { init, showPage, showPost, showSecretPost, hidePage, onLangChange, yieldToTour, onTourEnd };
 
 })();

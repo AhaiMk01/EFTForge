@@ -3,9 +3,13 @@
     {
       "id": "2026-09-28-v200-release",
       "title": "v2.0.0 - The Next Era of EFTForge",
-      "title_zh": "v2.0.0 - EFTForge 的全新时代",
+      "title_zh": "v2.0.0 - EFTForge 步入全新时代",
       "date": "2026-09-28",
       "tags": ["patch-notes", "major-update"],
+      "title_media": "./news/images/v200/v200Tmedia.mp4",
+      "thumbnail": "./news/images/v200/v200Thumbnail.png",
+      "thumbnail_style": "width: 75%;",
+      "thumbnail_img_style": "object-position: center 14%; transform: translateX(30px);",
       "file": "2026-09-28-v200-release.md",
       "file_zh": "2026-09-28-v200-release.zh.md"
     },

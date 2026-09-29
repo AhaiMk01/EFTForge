@@ -1045,6 +1045,8 @@ window.EFTForge = window.EFTForge || {};
         _intro.setAttribute("role", "dialog");
         _intro.setAttribute("aria-modal", "true");
         _intro.setAttribute("aria-labelledby", "b3d-intro-title");
+        // The tour outranks everything: news open now steps aside until it ends.
+        EFTForge.news?.yieldToTour();
         container.appendChild(_intro);
         document.body.classList.add("b3d-intro");
         _lockPage(true);
@@ -1052,12 +1054,15 @@ window.EFTForge = window.EFTForge || {};
     }
 
     function _unmountIntro() {
+        const was = !!_intro;
         _introSeq++;
         clearTimeout(_introResizeTimer);
         _lockPage(false);
         _intro?.remove();
         _intro = null;
         document.body.classList.remove("b3d-intro");
+        // News that came in during the tour waited for this.
+        if (was) EFTForge.news?.onTourEnd();
     }
 
     function _goIntro(step) {
