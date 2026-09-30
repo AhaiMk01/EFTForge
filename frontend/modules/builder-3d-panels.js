@@ -26,6 +26,8 @@ window.EFTForge = window.EFTForge || {};
     const MUZZLE_SHOW_KEY = "eftforge_b3d_muzzle_show"; // {smoke, flash}: which the viewer draws
     const SMOKE_TAB_KEY = "eftforge_b3d_smoke_tab";       // "smoke" or "flash": the stats shown while both draw
     const SMOKE_BURST = 10; // the viewer's smoke event counts a burst of this many
+    const FPS_KEY = "eftforge_b3d_game_fps";             // the game frame rate the overswing follows; 0 follows the display
+    const FPS_MIN = 30, FPS_MAX = 360;
     const SKILLS_KEY = "eftforge_b3d_skills";             // {weapon, aimDrills, endurance}; Strength is the stats panel's
     const PANEL_MARGIN = 8; // a dragged panel keeps this far inside the view
     const RANGE_PRESETS = [10, 25, 50, 100, 300, 500, 1000];
@@ -67,6 +69,7 @@ window.EFTForge = window.EFTForge || {};
     }
     const _s = {
         mode: "orbit", hasSights: false, slotsHidden: _read(SLOTS_HIDDEN_KEY) === "1",
+        fps: Math.min(FPS_MAX, Math.max(0, Math.round(Number(_read(FPS_KEY)) || 0))),
         sight: { mode: "orbit" }, zoom: null, ads: null, range: null, display: null, devices: [],
         tacticalCollapsed: _read(TACTICAL_FOLD_KEY) === "1",
         smoke: null, smokeCollapsed: _read(SMOKE_FOLD_KEY) === "1", smokeHeld: false,
@@ -357,6 +360,8 @@ window.EFTForge = window.EFTForge || {};
     function _buildRangePanel() {
         const slider = el("input.b3d-range-slider", { type: "range", min: "0", max: "1000", step: "1", value: "0" });
         slider.addEventListener("input", () => { if (_s.range) _send("setRange", { distance: _toDistance(Number(slider.value), _s.range) }); });
+        const fps = el("input.b3d-fps-slider", { type: "range", min: String(FPS_MIN), max: String(FPS_MAX), step: "1", value: "144" });
+        fps.addEventListener("input", () => _setFps(Number(fps.value)));
         _rangePanel = el("div.b3d-panel.b3d-rangepanel", {}, [
             el("div.b3d-panel-head", {}, [el("span.b3d-mini-title", { dataset: { label: "b3d.range" } }), el("span.b3d-range-dist")]),
             slider,
@@ -368,9 +373,20 @@ window.EFTForge = window.EFTForge || {};
             _buildKeyRow(),
             el("div.b3d-panel-head.b3d-display-head", {}, [el("span.b3d-mini-title", { dataset: { label: "b3d.display" } }), el("span.b3d-monitor")]),
             el("div.b3d-chip-row.b3d-ratios"),
+            // The game adds the aim-in kick once a frame, so the overswing grows with the frame rate.
+            el("div.b3d-panel-head.b3d-display-head", {}, [el("span.b3d-mini-title", { dataset: { label: "b3d.gameFps" } }), el("span.b3d-fps-value")]),
+            fps,
+            el("div.b3d-chip-row", {}, [el("button.b3d-chip.b3d-fps-auto", { dataset: { label: "b3d.fpsAuto" }, onclick: () => _setFps(0) })]),
         ]);
         _makeDraggable(RANGE_DRAG);
         _root.append(_rangePanel);
+    }
+
+    function _setFps(v) {
+        _s.fps = v;
+        _write(FPS_KEY, String(v));
+        _send("setAdsFrameRate", v);
+        _renderRange();
     }
 
     function _buildKeyRow() {
@@ -437,6 +453,13 @@ window.EFTForge = window.EFTForge || {};
             })));
             for (const b of _rangePanel.querySelectorAll(".b3d-ratios button")) b.classList.toggle("active", b.textContent === d.aspectRatio);
         }
+        const fps = _rangePanel.querySelector(".b3d-fps-slider");
+        _rangePanel.querySelector(".b3d-fps-value").textContent = _s.fps ? `${_s.fps} FPS` : _t("b3d.fpsAuto");
+        fps.dataset.tooltip = _t("b3d.fpsTip");
+        _rangePanel.querySelector(".b3d-fps-auto").dataset.tooltip = _t("b3d.fpsTip");
+        fps.classList.toggle("b3d-fps-off", !_s.fps);
+        if (_s.fps && document.activeElement !== fps) fps.value = String(_s.fps);
+        _rangePanel.querySelector(".b3d-fps-auto").classList.toggle("active", !_s.fps);
         _place(RANGE_DRAG);
         _place(SMOKE_DRAG);
     }
@@ -938,6 +961,7 @@ window.EFTForge = window.EFTForge || {};
         _send("setSlotsHidden", _s.slotsHidden);
         _send("setSkills", { ..._savedSkills(), strength: EFTForge.state.currentStrengthLevel ?? 10 });
         _send("setMuzzleEffects", _s.muzzleShow);
+        _send("setAdsFrameRate", _s.fps);
         try {
             const [range, display, ads, devices] = await Promise.all([
                 _api.call("rangeState"), _api.call("displayState"), _api.call("adsState"), _api.call("tacticalState"),

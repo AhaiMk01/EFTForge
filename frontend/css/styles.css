@@ -10676,6 +10676,9 @@ body.b3d-picker-open .b3d-viewbtns {
 .b3d-key-custom.active { border-color: #f5c542; }
 .b3d-display-head { border-top: 1px solid #2a2a2a; padding-top: 6px; }
 .b3d-monitor { font-size: 11px; color: #777; font-variant-numeric: tabular-nums; }
+.b3d-fps-value { font-size: 11px; color: #bbb; font-variant-numeric: tabular-nums; }
+.b3d-fps-slider { width: 100%; }
+.b3d-fps-slider.b3d-fps-off { opacity: 0.45; }
 
 /* Tactical devices: bottom left over the modding view, top right in the sight picture. */
 .b3d-tactical {
